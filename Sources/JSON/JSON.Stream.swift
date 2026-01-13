@@ -24,7 +24,7 @@ public import Async
 
 // MARK: - NDJSON Streaming
 
-extension JSON {
+extension JSON.ND {
     /// Creates a stream of JSON values from newline-delimited input.
     ///
     /// Each line is parsed as a complete JSON value. Empty lines are skipped.
@@ -36,10 +36,10 @@ extension JSON {
     /// ```swift
     /// let byteStream: some AsyncSequence<UInt8, Never> = ...
     ///
-    /// for await result in JSON.stream(ndjson: byteStream) {
+    /// for await result in JSON.ND.stream(byteStream) {
     ///     switch result {
     ///     case .success(let json):
-    ///         print(json.id.int)
+    ///         print(Int(json.id))
     ///     case .failure(let error):
     ///         print("Parse error: \(error)")
     ///     }
@@ -50,11 +50,11 @@ extension JSON {
     /// - Returns: A stream of parse results, one per line.
     @inlinable
     public static func stream<S: AsyncSequence & Sendable>(
-        ndjson bytes: S
+        _ bytes: S
     ) -> Async.Stream<Result<JSON, JSON.Error>>
     where S.Element == UInt8 {
         Async.Stream {
-            let state = ND.State(bytes.makeAsyncIterator())
+            let state = State(bytes.makeAsyncIterator())
             return Async.Stream<Result<JSON, JSON.Error>>.Iterator {
                 await state.next()
             }
@@ -183,14 +183,14 @@ extension JSON.Serializable {
     /// ## Usage
     ///
     /// ```swift
-    /// let user = try await User(collectingJSON: byteStream)
+    /// let user: User = try await .init(collecting: byteStream)
     /// ```
     ///
     /// - Parameter bytes: An async sequence of UTF-8 bytes.
     /// - Throws: `JSON.Error` if parsing or deserialization fails.
     @inlinable
     public init<S: AsyncSequence & Sendable>(
-        collectingJSON bytes: S
+        collecting bytes: S
     ) async throws(JSON.Error)
     where S.Element == UInt8 {
         let json = try await JSON.parse(collecting: bytes)

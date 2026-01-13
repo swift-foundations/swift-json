@@ -138,7 +138,7 @@ extension String: JSON.Serializable {
 
     @inlinable
     public static func deserialize(_ json: JSON) throws(JSON.Error) -> String {
-        guard let value = json.string else {
+        guard let value = String?(json) else {
             throw .typeMismatch(expected: "string", got: json.typeName)
         }
         return value
@@ -153,7 +153,7 @@ extension Bool: JSON.Serializable {
 
     @inlinable
     public static func deserialize(_ json: JSON) throws(JSON.Error) -> Bool {
-        guard let value = json.bool else {
+        guard let value = Bool(json) else {
             throw .typeMismatch(expected: "bool", got: json.typeName)
         }
         return value
@@ -168,7 +168,7 @@ extension Int: JSON.Serializable {
 
     @inlinable
     public static func deserialize(_ json: JSON) throws(JSON.Error) -> Int {
-        guard let value = json.int else {
+        guard let value = Int(json) else {
             throw .typeMismatch(expected: "int", got: json.typeName)
         }
         return value
@@ -185,7 +185,7 @@ extension Int64: JSON.Serializable {
 
     @inlinable
     public static func deserialize(_ json: JSON) throws(JSON.Error) -> Int64 {
-        guard let value = json.int64 else {
+        guard let value = Int64(json) else {
             throw .typeMismatch(expected: "int64", got: json.typeName)
         }
         return value
@@ -200,7 +200,7 @@ extension Double: JSON.Serializable {
 
     @inlinable
     public static func deserialize(_ json: JSON) throws(JSON.Error) -> Double {
-        guard let value = json.double else {
+        guard let value = Double(json) else {
             throw .typeMismatch(expected: "double", got: json.typeName)
         }
         return value
