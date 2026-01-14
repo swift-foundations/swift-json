@@ -138,7 +138,7 @@ extension String: JSON.Serializable {
 
     @inlinable
     public static func deserialize(_ json: JSON) throws(JSON.Error) -> String {
-        guard let value = String?(json) else {
+        guard case .string(let value) = json.raw else {
             throw .typeMismatch(expected: "string", got: json.typeName)
         }
         return value

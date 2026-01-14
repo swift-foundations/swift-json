@@ -25,9 +25,9 @@ struct StreamTests {
         }
 
         var ids: [Int] = []
-        for await result in JSON.stream(ndjson: bytes) {
+        for await result in JSON.ND.stream(bytes) {
             let json = try result.get()
-            if let id = json.id.int {
+            if let id = Int(json.id) {
                 ids.append(id)
             }
         }
@@ -52,9 +52,9 @@ struct StreamTests {
         }
 
         var ids: [Int] = []
-        for await result in JSON.stream(ndjson: bytes) {
+        for await result in JSON.ND.stream(bytes) {
             let json = try result.get()
-            if let id = json.id.int {
+            if let id = Int(json.id) {
                 ids.append(id)
             }
         }
@@ -80,10 +80,10 @@ struct StreamTests {
         var successes: [Int] = []
         var failures = 0
 
-        for await result in JSON.stream(ndjson: bytes) {
+        for await result in JSON.ND.stream(bytes) {
             switch result {
             case .success(let json):
-                if let id = json.id.int {
+                if let id = Int(json.id) {
                     successes.append(id)
                 }
             case .failure:
@@ -107,9 +107,9 @@ struct StreamTests {
         }
 
         var ids: [Int] = []
-        for await result in JSON.stream(ndjson: bytes) {
+        for await result in JSON.ND.stream(bytes) {
             let json = try result.get()
-            if let id = json.id.int {
+            if let id = Int(json.id) {
                 ids.append(id)
             }
         }
@@ -129,9 +129,9 @@ struct StreamTests {
         }
 
         var ids: [Int] = []
-        for await result in JSON.stream(ndjson: bytes) {
+        for await result in JSON.ND.stream(bytes) {
             let json = try result.get()
-            if let id = json.id.int {
+            if let id = Int(json.id) {
                 ids.append(id)
             }
         }
@@ -154,8 +154,8 @@ struct StreamTests {
 
         let json = try await JSON.parse(collecting: bytes)
 
-        #expect(json.name.string == "John")
-        #expect(json.age.int == 30)
+        #expect(String(json.name) == "John")
+        #expect(Int(json.age) == 30)
     }
 
     @Test("Parse empty async stream")
@@ -185,7 +185,7 @@ struct StreamTests {
             continuation.finish()
         }
 
-        let array = try await [Int](collectingJSON: bytes)
+        let array = try await [Int](collecting: bytes)
 
         #expect(array == [1, 2, 3])
     }
