@@ -55,7 +55,7 @@ extension JSON: ExpressibleByStringLiteral {
 extension JSON: ExpressibleByArrayLiteral {
     @inlinable
     public init(arrayLiteral elements: JSON...) {
-        self.raw = .array(RFC_8259.Array(elements.map(\.raw)))
+        self.raw = .array(RFC_8259.Array(elements.map { $0.raw }))
     }
 }
 

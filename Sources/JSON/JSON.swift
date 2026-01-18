@@ -102,7 +102,7 @@ extension JSON {
     /// Creates a JSON array.
     @inlinable
     public static func array(_ elements: [JSON]) -> JSON {
-        JSON(.array(RFC_8259.Array(elements.map(\.raw))))
+        JSON(.array(RFC_8259.Array(elements.map { $0.raw })))
     }
 
     /// Creates a JSON object.

@@ -197,3 +197,62 @@ extension JSON.Serializable {
         self = try Self.deserialize(json)
     }
 }
+
+
+// MARK: - Streaming Support
+
+extension JSON.Parse {
+    /// Creates a NDJSON stream parser.
+    ///
+    /// Returns a parser that processes newline-delimited JSON from async
+    /// sequences. Each line is parsed as a complete JSON value.
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// let stream = JSON.parse.stream(ndjson: byteSequence)
+    /// for await result in stream {
+    ///     switch result {
+    ///     case .success(let json): print(json)
+    ///     case .failure(let error): print("Error: \(error)")
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// - Parameter bytes: An async sequence of UTF-8 bytes.
+    /// - Returns: A stream of parse results, one per line.
+    @inlinable
+    public func stream<S: AsyncSequence & Sendable>(
+        ndjson bytes: S
+    ) -> Async.Stream<Result<JSON, JSON.Error>>
+    where S.Element == UInt8 {
+        // Delegate to the static stream function
+        Async.Stream {
+            let state = JSON.ND.State(bytes.makeAsyncIterator())
+            return Async.Stream<Result<JSON, JSON.Error>>.Iterator {
+                await state.next()
+            }
+        }
+    }
+
+    /// Parses a single JSON document from an async byte source.
+    ///
+    /// - Parameter bytes: An async sequence of UTF-8 bytes.
+    /// - Returns: The parsed JSON value.
+    /// - Throws: `JSON.Error` if parsing fails.
+    @inlinable
+    public func collecting<S: AsyncSequence & Sendable>(
+        _ bytes: S
+    ) async throws(JSON.Error) -> JSON
+    where S.Element == UInt8 {
+        var buffer: [UInt8] = []
+        do {
+            for try await byte in bytes {
+                buffer.append(byte)
+            }
+        } catch {
+            throw .unknown
+        }
+        return try self(buffer)
+    }
+}
