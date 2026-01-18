@@ -9,27 +9,23 @@ let package = Package(
         .iOS(.v26),
         .tvOS(.v26),
         .watchOS(.v26),
-        .visionOS(.v26),
+        .visionOS(.v26)
     ],
     products: [
-        .library(name: "JSON", targets: ["JSON"]),
+        .library(name: "JSON", targets: ["JSON"])
     ],
     dependencies: [
         .package(path: "../../swift-standards/swift-rfc-8259"),
-        .package(path: "../swift-async"),
+        .package(path: "../swift-async")
     ],
     targets: [
         .target(
             name: "JSON",
             dependencies: [
                 .product(name: "RFC 8259", package: "swift-rfc-8259"),
-                .product(name: "Async", package: "swift-async"),
+                .product(name: "Async", package: "swift-async")
             ]
-        ),
-        .testTarget(
-            name: "JSON Tests",
-            dependencies: ["JSON"]
-        ),
+        )
     ],
     swiftLanguageModes: [.v6]
 )
@@ -38,7 +34,7 @@ for target in package.targets where ![.system, .binary, .plugin].contains(target
     let settings: [SwiftSetting] = [
         .enableUpcomingFeature("ExistentialAny"),
         .enableUpcomingFeature("InternalImportsByDefault"),
-        .enableUpcomingFeature("MemberImportVisibility"),
+        .enableUpcomingFeature("MemberImportVisibility")
     ]
     target.swiftSettings = (target.swiftSettings ?? []) + settings
 }
