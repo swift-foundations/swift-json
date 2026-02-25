@@ -251,7 +251,7 @@ extension JSON {
     @inlinable
     public static func parse<Bytes>(_ bytes: Bytes) throws(JSON.Error) -> JSON
     where Bytes: Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
-        do {
+        do throws(RFC_8259.Error) {
             let value = try RFC_8259.parse(bytes)
             return JSON(value)
         } catch {

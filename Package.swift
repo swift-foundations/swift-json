@@ -25,7 +25,13 @@ let package = Package(
                 .product(name: "RFC 8259", package: "swift-rfc-8259"),
                 .product(name: "Async", package: "swift-async")
             ]
-        )
+        ),
+        .testTarget(
+            name: "JSON Tests",
+            dependencies: [
+                "JSON",
+            ]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )
@@ -36,6 +42,7 @@ for target in package.targets where ![.system, .binary, .plugin, .macro].contain
         .enableUpcomingFeature("ExistentialAny"),
         .enableUpcomingFeature("InternalImportsByDefault"),
         .enableUpcomingFeature("MemberImportVisibility"),
+        .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
         .enableExperimentalFeature("Lifetimes"),
         .enableExperimentalFeature("SuppressedAssociatedTypes"),
         .enableExperimentalFeature("SuppressedAssociatedTypesWithDefaults"),
