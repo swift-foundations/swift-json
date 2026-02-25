@@ -5,3 +5,4 @@
 
 // Expose RFC_8259 for advanced use cases
 @_exported import RFC_8259
+@_exported public import Async

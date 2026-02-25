@@ -250,8 +250,8 @@ extension JSON {
     /// - Throws: `JSON.Error` if parsing fails.
     @inlinable
     public static func parse<Bytes>(_ bytes: Bytes) throws(JSON.Error) -> JSON
-    where Bytes: Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
-        do throws(RFC_8259.Error) {
+    where Bytes: Swift.Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
+        do {
             let value = try RFC_8259.parse(bytes)
             return JSON(value)
         } catch {

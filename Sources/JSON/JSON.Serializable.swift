@@ -86,7 +86,7 @@ extension JSON.Serializable {
     /// - Throws: `JSON.Error` if parsing or deserialization fails.
     @inlinable
     public init<Bytes>(jsonBytes: Bytes) throws(JSON.Error)
-    where Bytes: Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
+    where Bytes: Swift.Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
         let json = try JSON.parse(jsonBytes)
         self = try Self.deserialize(json)
     }
@@ -179,7 +179,7 @@ extension Int64: JSON.Serializable {
     @inlinable
     public static func serialize(_ value: Int64) -> JSON {
         let str = String(value)
-        let number = RFC_8259.Number(value, original: .init(Array(str.utf8)))
+        let number = RFC_8259.Number(value, original: .init(Swift.Array(str.utf8)))
         return JSON(.number(number))
     }
 
@@ -207,7 +207,7 @@ extension Double: JSON.Serializable {
     }
 }
 
-extension Array: JSON.Serializable where Element: JSON.Serializable {
+extension Swift.Array: JSON.Serializable where Element: JSON.Serializable {
     @inlinable
     public static func serialize(_ value: [Element]) -> JSON {
         .array(value.map { $0.json })
