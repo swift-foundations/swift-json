@@ -127,7 +127,7 @@ extension JSON.Parse {
 extension JSON.Parse {
     /// Creates a parser that tracks byte offsets in errors.
     ///
-    /// The returned parser wraps errors with `Parsing.Error.Located`,
+    /// The returned parser wraps errors with `Parser.Error.Located`,
     /// providing precise byte-level position information for diagnostics.
     ///
     /// ## Example
@@ -135,7 +135,7 @@ extension JSON.Parse {
     /// ```swift
     /// do {
     ///     let json = try JSON.parse.located().parse(bytes)
-    /// } catch let error as Parsing.Error.Located<JSON.Error> {
+    /// } catch let error as Parser.Error.Located<JSON.Error> {
     ///     print("Error at byte \(error.offset): \(error.error)")
     /// }
     /// ```
@@ -223,7 +223,7 @@ extension JSON {
     /// ```swift
     /// do {
     ///     let json = try JSON.parse.located().parse(bytes)
-    /// } catch let error as JSON.LocatedError {
+    /// } catch let error as Parser.Error.Located<JSON.Error> {
     ///     print("Error at byte \(error.offset): \(error.error)")
     /// }
     /// ```
@@ -240,14 +240,14 @@ extension JSON {
         ///
         /// - Parameter string: The JSON string to parse.
         /// - Returns: The parsed JSON value.
-        /// - Throws: `JSON.LocatedError` if parsing fails.
+        /// - Throws: `Parser.Error.Located<JSON.Error>` if parsing fails.
         @inlinable
-        public func parse(_ string: String) throws(JSON.LocatedError) -> JSON {
+        public func parse(_ string: String) throws(Parser.Error.Located<JSON.Error>) -> JSON {
             do {
                 let value = try RFC_8259.parse(string, maxDepth: maxDepth)
                 return JSON(value)
             } catch let error {
-                throw JSON.LocatedError(JSON.Error(error), at: error.offset)
+                throw Parser.Error.Located<JSON.Error>(JSON.Error(error), at: error.offset)
             }
         }
 
@@ -255,50 +255,17 @@ extension JSON {
         ///
         /// - Parameter bytes: The UTF-8 encoded JSON bytes.
         /// - Returns: The parsed JSON value.
-        /// - Throws: `JSON.LocatedError` if parsing fails.
+        /// - Throws: `Parser.Error.Located<JSON.Error>` if parsing fails.
         @inlinable
-        public func parse<Bytes>(_ bytes: Bytes) throws(JSON.LocatedError) -> JSON
+        public func parse<Bytes>(_ bytes: Bytes) throws(Parser.Error.Located<JSON.Error>) -> JSON
         where Bytes: Swift.Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
             do {
                 let value = try RFC_8259.parse(bytes, maxDepth: maxDepth)
                 return JSON(value)
             } catch let error {
-                throw JSON.LocatedError(JSON.Error(error), at: error.offset)
+                throw Parser.Error.Located<JSON.Error>(JSON.Error(error), at: error.offset)
             }
         }
-    }
-}
-
-// MARK: - LocatedError Type
-
-extension JSON {
-    /// An error with byte-offset location information.
-    ///
-    /// This type wraps a `JSON.Error` with the byte offset where the error
-    /// occurred, enabling precise error reporting.
-    public struct LocatedError: Swift.Error, Sendable, Hashable {
-        /// The underlying JSON error.
-        public let error: JSON.Error
-
-        /// Byte offset from the start of input where the error occurred.
-        public let offset: Int
-
-        /// Creates a located error.
-        ///
-        /// - Parameters:
-        ///   - error: The underlying error.
-        ///   - offset: Byte offset from input start.
-        @inlinable
-        public init(_ error: JSON.Error, at offset: Int) {
-            self.error = error
-            self.offset = offset
-        }
-    }
-}
-
-extension JSON.LocatedError: CustomStringConvertible {
-    public var description: String {
-        "at byte \(offset): \(error)"
     }
 }
 
