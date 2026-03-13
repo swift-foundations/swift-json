@@ -15,7 +15,7 @@ let package = Package(
         .library(name: "JSON", targets: ["JSON"])
     ],
     dependencies: [
-        .package(path: "../../swift-standards/swift-rfc-8259"),
+        .package(path: "../../swift-ietf/swift-rfc-8259"),
         .package(path: "../../swift-primitives/swift-parser-primitives"),
         .package(path: "../swift-async")
     ],
