@@ -274,7 +274,7 @@ extension JSON {
 extension RFC_8259.Error {
     /// The byte offset where this error occurred.
     @usableFromInline
-    var offset: Int {
+    var offset: Text.Position {
         switch self {
         case .unexpectedToken(let pos, _, _): return pos.offset
         case .unexpectedEndOfInput(let pos, _): return pos.offset
