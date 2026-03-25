@@ -33,40 +33,40 @@ extension JSON {
             case .unexpectedToken(let pos, _, _):
                 self = .invalidSyntax(
                     message: "Unexpected token",
-                    line: pos.line,
-                    column: pos.column
+                    line: Int(pos.location.line.rawValue),
+                    column: Int(bitPattern: pos.location.column)
                 )
 
             case .unexpectedEndOfInput(let pos, _):
-                if pos.offset == 0 {
+                if pos.offset == .zero {
                     self = .emptyInput
                 } else {
                     self = .invalidSyntax(
                         message: "Unexpected end of input",
-                        line: pos.line,
-                        column: pos.column
+                        line: Int(pos.location.line.rawValue),
+                        column: Int(bitPattern: pos.location.column)
                     )
                 }
 
             case .invalidNumber(let pos, let reason):
                 self = .invalidSyntax(
                     message: "Invalid number: \(reason)",
-                    line: pos.line,
-                    column: pos.column
+                    line: Int(pos.location.line.rawValue),
+                    column: Int(bitPattern: pos.location.column)
                 )
 
             case .invalidString(let pos, let reason):
                 self = .invalidSyntax(
                     message: "Invalid string: \(reason)",
-                    line: pos.line,
-                    column: pos.column
+                    line: Int(pos.location.line.rawValue),
+                    column: Int(bitPattern: pos.location.column)
                 )
 
             case .invalidUTF8(let pos, _):
                 self = .invalidSyntax(
                     message: "Invalid UTF-8 sequence",
-                    line: pos.line,
-                    column: pos.column
+                    line: Int(pos.location.line.rawValue),
+                    column: Int(bitPattern: pos.location.column)
                 )
 
             case .depthExceeded(_, let limit):
@@ -75,8 +75,8 @@ extension JSON {
             case .trailingContent(let pos):
                 self = .invalidSyntax(
                     message: "Trailing content after JSON value",
-                    line: pos.line,
-                    column: pos.column
+                    line: Int(pos.location.line.rawValue),
+                    column: Int(bitPattern: pos.location.column)
                 )
             }
         }

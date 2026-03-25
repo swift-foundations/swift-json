@@ -271,7 +271,7 @@ extension JSON {
     /// - Returns: The JSON string.
     @inlinable
     public func serialize(pretty: Bool = false, sortKeys: Bool = false) -> String {
-        let options = RFC_8259.Options(prettyPrint: pretty, sortKeys: sortKeys)
+        let options = RFC_8259.Encode.Options(prettyPrint: pretty, sortKeys: sortKeys)
         let bytes = raw.encode(options: options)
         return String(decoding: bytes, as: UTF8.self)
     }
@@ -284,7 +284,7 @@ extension JSON {
     /// - Returns: The UTF-8 encoded JSON bytes.
     @inlinable
     public func serialize(pretty: Bool = false, sortKeys: Bool = false, as: [UInt8].Type) -> [UInt8] {
-        let options = RFC_8259.Options(prettyPrint: pretty, sortKeys: sortKeys)
+        let options = RFC_8259.Encode.Options(prettyPrint: pretty, sortKeys: sortKeys)
         return raw.encode(options: options)
     }
 }
