@@ -74,6 +74,12 @@ extension JSON {
 
 extension JSON.ND {
     /// Internal state machine for NDJSON parsing.
+    // WHY: Category D — structural Sendable workaround.
+    // WHY: AsyncIteratorProtocol generic parameter blocks Sendable inference.
+    // WHY: No caller invariant to uphold — data is structurally safe.
+    // WHEN TO REMOVE: When compiler gains structural Sendable inference through
+    // WHEN TO REMOVE: AsyncIteratorProtocol generic parameters.
+    // TRACKING: unsafe-audit-findings.md Category D; SP-4.
     @usableFromInline
     internal final class State<I: AsyncIteratorProtocol>: @unchecked Sendable
     where I.Element == UInt8 {
