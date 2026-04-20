@@ -9,8 +9,8 @@ struct StreamTests {
 
     // MARK: - NDJSON Streaming
 
-    @Test("Parse NDJSON stream")
-    func parseNDJSON() async throws {
+    @Test
+    func `Parse NDJSON stream`() async throws {
         let input = """
         {"id":1}
         {"id":2}
@@ -35,8 +35,8 @@ struct StreamTests {
         #expect(ids == [1, 2, 3])
     }
 
-    @Test("Skip empty lines in NDJSON")
-    func skipEmptyLines() async throws {
+    @Test
+    func `Skip empty lines in NDJSON`() async throws {
         let input = """
         {"id":1}
 
@@ -62,8 +62,8 @@ struct StreamTests {
         #expect(ids == [1, 2])
     }
 
-    @Test("Continue after malformed line")
-    func continueAfterError() async {
+    @Test
+    func `Continue after malformed line`() async {
         let input = """
         {"id":1}
         not json
@@ -95,8 +95,8 @@ struct StreamTests {
         #expect(failures == 1)
     }
 
-    @Test("Handle CRLF line endings")
-    func handleCRLF() async throws {
+    @Test
+    func `Handle CRLF line endings`() async throws {
         let input = "{\"id\":1}\r\n{\"id\":2}\r\n"
 
         let bytes = AsyncStream<UInt8> { continuation in
@@ -117,8 +117,8 @@ struct StreamTests {
         #expect(ids == [1, 2])
     }
 
-    @Test("Parse without trailing newline")
-    func noTrailingNewline() async throws {
+    @Test
+    func `Parse without trailing newline`() async throws {
         let input = "{\"id\":1}\n{\"id\":2}"
 
         let bytes = AsyncStream<UInt8> { continuation in
@@ -141,8 +141,8 @@ struct StreamTests {
 
     // MARK: - Single Document Async Parse
 
-    @Test("Parse single document from async bytes")
-    func parseSingleAsync() async throws {
+    @Test
+    func `Parse single document from async bytes`() async throws {
         let input = #"{"name": "John", "age": 30}"#
 
         let bytes = AsyncStream<UInt8> { continuation in
@@ -158,8 +158,8 @@ struct StreamTests {
         #expect(Int(json.age) == 30)
     }
 
-    @Test("Parse empty async stream")
-    func parseEmptyAsync() async {
+    @Test
+    func `Parse empty async stream`() async {
         let bytes = AsyncStream<UInt8> { continuation in
             continuation.finish()
         }
@@ -174,8 +174,8 @@ struct StreamTests {
 
     // MARK: - JSON.Serializable Async
 
-    @Test("Deserialize from async bytes")
-    func deserializeAsync() async throws {
+    @Test
+    func `Deserialize from async bytes`() async throws {
         let input = "[1, 2, 3]"
 
         let bytes = AsyncStream<UInt8> { continuation in

@@ -9,40 +9,40 @@ struct JSONTests {
 
     // MARK: - Literals
 
-    @Test("Null literal")
-    func nullLiteral() {
+    @Test
+    func `Null literal`() {
         let json: JSON = nil
         #expect(json.isNull)
     }
 
-    @Test("Boolean literals")
-    func booleanLiterals() {
+    @Test
+    func `Boolean literals`() {
         let t: JSON = true
         let f: JSON = false
         #expect(Bool(t) == true)
         #expect(Bool(f) == false)
     }
 
-    @Test("Integer literal")
-    func integerLiteral() {
+    @Test
+    func `Integer literal`() {
         let json: JSON = 42
         #expect(Int(json) == 42)
     }
 
-    @Test("Float literal")
-    func floatLiteral() {
+    @Test
+    func `Float literal`() {
         let json: JSON = 3.14
         #expect(Double(json) == 3.14)
     }
 
-    @Test("String literal")
-    func stringLiteral() {
+    @Test
+    func `String literal`() {
         let json: JSON = "hello"
         #expect(String(json) == "hello")
     }
 
-    @Test("Array literal")
-    func arrayLiteral() {
+    @Test
+    func `Array literal`() {
         let json: JSON = [1, 2, 3]
         #expect(json.array?.count == 3)
         #expect(Int(json[0]) == 1)
@@ -50,15 +50,15 @@ struct JSONTests {
         #expect(Int(json[2]) == 3)
     }
 
-    @Test("Dictionary literal")
-    func dictionaryLiteral() {
+    @Test
+    func `Dictionary literal`() {
         let json: JSON = ["name": "John", "age": 30]
         #expect(String(json["name"]) == "John")
         #expect(Int(json["age"]) == 30)
     }
 
-    @Test("Nested literal")
-    func nestedLiteral() {
+    @Test
+    func `Nested literal`() {
         let json: JSON = [
             "user": [
                 "name": "John",
@@ -71,30 +71,30 @@ struct JSONTests {
 
     // MARK: - Dynamic Member Lookup
 
-    @Test("Dynamic member lookup")
-    func dynamicMemberLookup() {
+    @Test
+    func `Dynamic member lookup`() {
         let json: JSON = ["name": "John", "age": 30]
         #expect(String(json.name) == "John")
         #expect(Int(json.age) == 30)
     }
 
-    @Test("Missing key returns null")
-    func missingKeyReturnsNull() {
+    @Test
+    func `Missing key returns null`() {
         let json: JSON = ["name": "John"]
         #expect(json.missing.isNull)
     }
 
     // MARK: - Parsing
 
-    @Test("Parse string")
-    func parseString() throws {
+    @Test
+    func `Parse string`() throws {
         let json = try JSON.parse(#"{"name": "John", "age": 30}"#)
         #expect(String(json.name) == "John")
         #expect(Int(json.age) == 30)
     }
 
-    @Test("Parse array")
-    func parseArray() throws {
+    @Test
+    func `Parse array`() throws {
         let json = try JSON.parse("[1, 2, 3]")
         #expect(Int(json[0]) == 1)
         #expect(Int(json[1]) == 2)
@@ -103,16 +103,16 @@ struct JSONTests {
 
     // MARK: - Serialization
 
-    @Test("Serialize to string")
-    func serializeToString() {
+    @Test
+    func `Serialize to string`() {
         let json: JSON = ["name": "John"]
         let string = json.serialize()
         #expect(string.contains("name"))
         #expect(string.contains("John"))
     }
 
-    @Test("Round-trip")
-    func roundTrip() throws {
+    @Test
+    func `Round-trip`() throws {
         let original: JSON = [
             "name": "John",
             "age": 30,
@@ -129,8 +129,8 @@ struct JSONTests {
 
     // MARK: - JSON.Serializable
 
-    @Test("String serializable")
-    func stringSerializable() throws {
+    @Test
+    func `String serializable`() throws {
         let string = "hello"
         let json = string.json
         #expect(String(json) == "hello")
@@ -139,8 +139,8 @@ struct JSONTests {
         #expect(decoded == "hello")
     }
 
-    @Test("Int serializable")
-    func intSerializable() throws {
+    @Test
+    func `Int serializable`() throws {
         let num = 42
         let json = num.json
         #expect(Int(json) == 42)
@@ -149,8 +149,8 @@ struct JSONTests {
         #expect(decoded == 42)
     }
 
-    @Test("Array serializable")
-    func arraySerializable() throws {
+    @Test
+    func `Array serializable`() throws {
         let arr = [1, 2, 3]
         let json = arr.json
         #expect(Int(json[0]) == 1)
@@ -159,8 +159,8 @@ struct JSONTests {
         #expect(decoded == [1, 2, 3])
     }
 
-    @Test("Dictionary serializable")
-    func dictionarySerializable() throws {
+    @Test
+    func `Dictionary serializable`() throws {
         let dict = ["a": 1, "b": 2]
         let json = dict.json
         #expect(Int(json["a"]) == 1)
@@ -170,8 +170,8 @@ struct JSONTests {
         #expect(decoded["b"] == 2)
     }
 
-    @Test("Optional serializable")
-    func optionalSerializable() throws {
+    @Test
+    func `Optional serializable`() throws {
         let some: Int? = 42
         let none: Int? = nil
 
