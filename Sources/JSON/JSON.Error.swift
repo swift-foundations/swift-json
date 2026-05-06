@@ -15,7 +15,11 @@ extension JSON {
         case missingKey(String)
 
         /// The JSON syntax is invalid.
-        case invalidSyntax(message: String, line: Int, column: Int)
+        ///
+        /// `location` carries the typed `Text.Location` (line + column)
+        /// from `swift-text-primitives`. Stays high-typed end-to-end —
+        /// no `Int` boundary conversions at the error-construction site.
+        case invalidSyntax(message: String, location: Text.Location)
 
         /// The input was empty or whitespace-only.
         case emptyInput
@@ -33,8 +37,7 @@ extension JSON {
             case .unexpectedToken(let pos, _, _):
                 self = .invalidSyntax(
                     message: "Unexpected token",
-                    line: Int(pos.location.line.underlying),
-                    column: Int(bitPattern: pos.location.column)
+                    location: pos.location
                 )
 
             case .unexpectedEndOfInput(let pos, _):
@@ -43,30 +46,26 @@ extension JSON {
                 } else {
                     self = .invalidSyntax(
                         message: "Unexpected end of input",
-                        line: Int(pos.location.line.underlying),
-                        column: Int(bitPattern: pos.location.column)
+                        location: pos.location
                     )
                 }
 
             case .invalidNumber(let pos, let reason):
                 self = .invalidSyntax(
                     message: "Invalid number: \(reason)",
-                    line: Int(pos.location.line.underlying),
-                    column: Int(bitPattern: pos.location.column)
+                    location: pos.location
                 )
 
             case .invalidString(let pos, let reason):
                 self = .invalidSyntax(
                     message: "Invalid string: \(reason)",
-                    line: Int(pos.location.line.underlying),
-                    column: Int(bitPattern: pos.location.column)
+                    location: pos.location
                 )
 
             case .invalidUTF8(let pos, _):
                 self = .invalidSyntax(
                     message: "Invalid UTF-8 sequence",
-                    line: Int(pos.location.line.underlying),
-                    column: Int(bitPattern: pos.location.column)
+                    location: pos.location
                 )
 
             case .depthExceeded(_, let limit):
@@ -75,8 +74,7 @@ extension JSON {
             case .trailingContent(let pos):
                 self = .invalidSyntax(
                     message: "Trailing content after JSON value",
-                    line: Int(pos.location.line.underlying),
-                    column: Int(bitPattern: pos.location.column)
+                    location: pos.location
                 )
             }
         }
@@ -94,8 +92,8 @@ extension JSON.Error: CustomStringConvertible {
         case .missingKey(let key):
             return "Missing required key: '\(key)'"
 
-        case .invalidSyntax(let message, let line, let column):
-            return "JSON syntax error at line \(line), column \(column): \(message)"
+        case .invalidSyntax(let message, let location):
+            return "JSON syntax error at \(location): \(message)"
 
         case .emptyInput:
             return "Empty input"
