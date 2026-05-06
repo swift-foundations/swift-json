@@ -33,7 +33,7 @@ extension JSON {
             case .unexpectedToken(let pos, _, _):
                 self = .invalidSyntax(
                     message: "Unexpected token",
-                    line: Int(pos.location.line.rawValue),
+                    line: Int(pos.location.line.underlying),
                     column: Int(bitPattern: pos.location.column)
                 )
 
@@ -43,7 +43,7 @@ extension JSON {
                 } else {
                     self = .invalidSyntax(
                         message: "Unexpected end of input",
-                        line: Int(pos.location.line.rawValue),
+                        line: Int(pos.location.line.underlying),
                         column: Int(bitPattern: pos.location.column)
                     )
                 }
@@ -51,21 +51,21 @@ extension JSON {
             case .invalidNumber(let pos, let reason):
                 self = .invalidSyntax(
                     message: "Invalid number: \(reason)",
-                    line: Int(pos.location.line.rawValue),
+                    line: Int(pos.location.line.underlying),
                     column: Int(bitPattern: pos.location.column)
                 )
 
             case .invalidString(let pos, let reason):
                 self = .invalidSyntax(
                     message: "Invalid string: \(reason)",
-                    line: Int(pos.location.line.rawValue),
+                    line: Int(pos.location.line.underlying),
                     column: Int(bitPattern: pos.location.column)
                 )
 
             case .invalidUTF8(let pos, _):
                 self = .invalidSyntax(
                     message: "Invalid UTF-8 sequence",
-                    line: Int(pos.location.line.rawValue),
+                    line: Int(pos.location.line.underlying),
                     column: Int(bitPattern: pos.location.column)
                 )
 
@@ -75,7 +75,7 @@ extension JSON {
             case .trailingContent(let pos):
                 self = .invalidSyntax(
                     message: "Trailing content after JSON value",
-                    line: Int(pos.location.line.rawValue),
+                    line: Int(pos.location.line.underlying),
                     column: Int(bitPattern: pos.location.column)
                 )
             }
