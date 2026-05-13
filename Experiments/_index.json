@@ -1,0 +1,25 @@
+{
+  "$schema": "https://swift-institute.org/schemas/experiments-index-v1.json",
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-05-13",
+  "title": "swift-json Experiments",
+  "blurb": "Experiments grounded in swift-json's parsing API.",
+  "scope": "swift-foundations/swift-json",
+  "experiments": [
+    {
+      "directory": "symbol-graph-conformance-oracle",
+      "category": "format-verification",
+      "purpose": "Verify that `swift-symbolgraph-extract` emits sufficient `conformsTo` relationships in its JSON output to reconstruct a protocol-refinement table — replacing the hardcoded `idiomKnownStdlibRefinements` in `Lint.Rule.Idiom.RedundantRefinement` with a precomputed oracle. The empirical foundation for Shape F in `swift-foundations/swift-linter/Research/lsp-sourcekit-integration.md` v1.1.0.",
+      "date": "2026-05-13",
+      "toolchain": "Apple Swift 6.3.1",
+      "status": "CONFIRMED",
+      "statusDetail": "All three hypothesis claims dispositioned: (1) protocol-protocol conformsTo IS in symbol-graph JSON; (2) ~120-line reducer suffices; (3) wall-clock under 30s CONFIRMED for per-institute-module graphs (Carrier 48ms), REFUTED for Swift stdlib graph (128s) — swift-json text-parser bottleneck on 86 MB pretty-printed input, not a format limitation; production oracle generation is offline. ALL 26 entries of the hardcoded `idiomKnownStdlibRefinements` table reproduced; 110 additional refinements extracted.",
+      "statusRaw": "CONFIRMED",
+      "crossRefs": [
+        "swift-foundations/swift-linter-rules/Sources/Linter Rule Idiom/Lint.Rule.Idiom.RedundantRefinement.swift",
+        "swift-foundations/swift-linter/Research/lsp-sourcekit-integration.md",
+        "swift-institute/Experiments/error-implies-sendable/"
+      ]
+    }
+  ]
+}

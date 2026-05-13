@@ -1,0 +1,13 @@
+# SwiftPM build directory
+.build/
+
+# `swift symbolgraph-extract` regenerable artifacts (86 MB+; reproduced by
+# the recipe in main.swift's header).
+Outputs/swift-stdlib/
+
+# Per-run reducer output JSON; regenerated each time the binary runs.
+# The Outputs/run-*.txt reports contain the human-readable evidence.
+Outputs/conformance-oracle.json
+
+# Compilation output; regenerable via `swift build 2>&1 | tee Outputs/build.txt`.
+Outputs/build.txt
