@@ -27,6 +27,17 @@
       "statusRaw": "DECISION",
       "tier": 2,
       "scope": null
+    },
+    {
+      "file": "value-tree-redesign-v2.md",
+      "displayName": "Value Tree Redesign — swift-json v2",
+      "topic": "swift-json v2 value-tree architecture targeting O(1) lookup beating Foundation on lookup-heavy workloads (canonical: symbol-graph oracle's symbol.kind.identifier traversal pattern over 14 552 symbols). Enumerates four architectures: L1 (Ordered dict, Copyable Value — recommended), L2 (~Copyable arena-bound Value tree), L3 (hybrid small/large), L4 (lazy index). Recommends L1: replace RFC_8259.Object._storage with Dictionary<String, Value>.Ordered from swift-dictionary-primitives; preserves entire public API surface; consumes witness-primitive triple transitively via Hash Primitives Standard Library Integration. L2 stays parked as the predecessor's conditional Phase B, re-opens only with a second hot consumer + Buffer.Arena Option A landed. Phased plan: L1-0 verification + lookup-bench mode (½ day), L1-1 storage replacement (3–5 days), L1-2 measurement gate, L1-3 conditional cleanup.",
+      "date": "2026-05-13",
+      "status": "RECOMMENDATION",
+      "statusDetail": null,
+      "statusRaw": "RECOMMENDATION",
+      "tier": 2,
+      "scope": null
     }
   ],
   "narrativeSections": [
