@@ -2,14 +2,43 @@
 
 <!--
 ---
-version: 1.0.2
+version: 1.1.0
 last_updated: 2026-05-13
-status: PREMISE-PARTIALLY-RECONFIRMED
+status: SUPERSEDED-BY-EVIDENCE
 tier: 2
 ---
 -->
 
-> **v1.0.2 (2026-05-13)** — Phase L1-0's deeper measurement (three
+> **v1.1.0 (2026-05-13)** — **L1 ARCHITECTURE EMPIRICALLY REFUTED.**
+> A real prototype implementation of L1 was built and measured. Both
+> parse AND lookup regressed materially — 4.4× parse regression and
+> 3.3× lookup regression at the canonical workload. The root cause is
+> **structural and not fixable within the Copyable-Value design space**:
+> every `case .object(let o) = raw` extract copies Object, and any
+> multi-buffer storage (Dict.Ordered: 3-4 refcounts; Swift.Dictionary
+> + side-order-array: 2 refcounts) costs more on copy than the
+> single-Array baseline (1 refcount). At the canonical workload's
+> mean N=2, the refcount-per-copy overhead exceeds the algorithmic
+> O(1) win. The L1-1 prototype was rolled back; baseline restored.
+>
+> Two interventions were explored to rescue L1 — neither succeeded:
+> bulk init via `init(_:uniquingKeysWith:)` (no measurable improvement,
+> proving construction-time dup check wasn't the bottleneck); and a
+> diagnostic `Swift.Dictionary` + side-order-array swap (parse 1.82×
+> baseline, lookup 2.59× baseline — improvement over Dict.Ordered but
+> still a regression vs the current shape). The wrapper-indirection
+> cost is dominant; storage primitive choice is a 2× factor on top.
+>
+> Status flipped PREMISE-PARTIALLY-RECONFIRMED → SUPERSEDED-BY-EVIDENCE.
+> The L1 architecture cannot outperform the current Array-linear shape
+> at canonical workloads while preserving Copyable Value. The v2 arc
+> closes here. See §12 "L1-1 disposition" appended below for the full
+> empirical record. L2 (~Copyable Value cascade) remains documented in
+> §3 as the only path forward, but is NOT pursued speculatively —
+> re-opens only with a concrete consumer ask for sub-microsecond JSON
+> traversal at large object sizes.
+>
+> **Original v1.0.2 framing (now superseded)**: Phase L1-0's deeper measurement (three
 > new bench modes added to `Experiments/parse-performance-bench`)
 > nuances the v1.0.1 PREMISE-INVALIDATED finding. The premise was
 > wrong on one axis (swift-json is **already** ~14× faster than
@@ -655,6 +684,123 @@ Until both fire, L2 stays the conditional Phase B of the predecessor arc. This d
 - **Phase L2 (DEFERRED)**: conditional follow-on per `parse-performance-architecture.md` §5; re-opens only with second hot consumer + Buffer.Arena Option A landed.
 
 **Migration story for downstream consumers**: zero public-API break. `Object[key]?.string`, `for (k, v) in obj.object!`, `json.user.name.string`, `JSON.parse.prepared()`, `JSON.parse.located()`, `JSON.ND.stream`, `JSON.Serializable`, `[String: JSON]` literals, dynamic-member-lookup chains — all survive byte-identical. The only consumer-visible difference is that `Object[key]` is now O(1) instead of O(n) — a strict improvement. If `JSON.dictionary` is deprecated in L1-3, consumers can migrate to `JSON.object` (existing accessor); SemVer-MAJOR is justifiable if any change to that accessor lands, but most downstream code uses the dynamic-member-lookup chain rather than `.dictionary` directly.
+
+## 12. L1-1 disposition — SUPERSEDED-BY-EVIDENCE (v1.1.0)
+
+A real prototype of L1 was implemented in `swift-rfc-8259/Sources/RFC 8259/RFC_8259.Object.swift`:
+`_storage: [(String, Value)]` → `_storage: Dictionary<String, Value>.Ordered`
+with matching Iterator and Package.swift dep additions. 177/177 tests
+passed; the implementation was correct. The measurement gate at L1-2
+fired:
+
+### Measured outcomes (L1-1 prototype)
+
+86 MB `Swift.symbols.json`, release, macOS 26 arm64, 3-iter parse,
+50-iter lookup:
+
+| Path | Baseline (Array-linear) | L1 prototype (Dict.Ordered) | Δ |
+|------|------------------------:|----------------------------:|---|
+| swift-json `JSON.parse([UInt8])` (per iter) | 0.304 s | 1.333 s | **+339%** ❌ |
+| swift-json `JSON.parse(String)` (per iter) | 0.316 s | 1.369 s | **+333%** ❌ |
+| swift-json lookup pass (per iter) | 3.16 ms | 10.3 ms | **+226%** ❌ |
+| Foundation parse (per iter) | 0.299 s | 0.301 s | — |
+| Foundation lookup pass (per iter) | 46 ms | 46 ms | — |
+
+Both parse and lookup regressed catastrophically. Per the gate
+criteria, **roll back**.
+
+### Two rescue interventions explored
+
+**Intervention A**: replace per-key `if _storage[k] == nil { set }`
+pattern with `Dictionary.Ordered.init(_:uniquingKeysWith:)`. No
+measurable improvement on parse time (still ~1.3 s/iter). Construction-
+time dup-check wasn't the bottleneck.
+
+**Intervention B (diagnostic)**: swap `Dict.Ordered` for `Swift.Dictionary
++ [String]` side-order-array (drops some semantics but tests the
+"storage primitive choice" axis in isolation). Results:
+
+| Path | Baseline | Dict.Ordered | Swift.Dictionary + order | Δ vs baseline |
+|------|---------:|-------------:|-------------------------:|--------------:|
+| Parse [UInt8]/iter | 0.304 s | 1.333 s | 0.553 s | **+82%** ❌ |
+| Lookup/iter | 3.16 ms | 10.3 ms | 8.2 ms | **+159%** ❌ |
+
+Swift.Dictionary cuts the regression roughly in half compared to
+Dict.Ordered, but **still regresses materially vs the current shape**.
+
+### Structural diagnosis
+
+The cost dominant in both regressions is **refcount per Object copy on
+`case .object(let o) = raw` extract**. Every JSON traversal step does
+this extract; Object holds the storage as a stored property; the
+storage's refcount(s) get incremented (and later decremented) on each
+copy.
+
+| Storage shape | Refcounts per Object copy |
+|---|---|
+| `[(String, Value)]` Array (baseline) | **1** |
+| `Swift.Dictionary` + `[String]` side-order-array | **2** |
+| `Dict.Ordered` (`Set<Key>.Ordered + Buffer<Value>.Linear + Hash.Table<Key>`) | **3-4** |
+
+At the canonical workload's mean N=2, the algorithmic O(1) vs O(n)
+win is ~10-15 ns per lookup. The refcount overhead from multi-buffer
+storage is ~30-40 ns per Object copy. **Integration cost > algorithmic
+gain at canonical N.** The win condition would fire only at N ≥ 30-50,
+which the real-world workload (mean 2.06, max 11) does not reach.
+
+### Why the storage micro misled
+
+The L1-0 `crossover` micro-bench measured isolated dictionary lookups
+with pre-warmed caches and direct access — it correctly showed
+Dict.Ordered (18 ns) beating linear (170 ns) at N=4. But the micro did
+not capture:
+
+1. The refcount cost of Object copy along the hot path
+2. The cost of `case .object(let o)` enum extract
+3. The `JSON` wrapper layer's `subscript(_:String)` flow
+4. Cache-cold access during real traversal
+
+The integrated path through `RFC_8259.Value.object → Object[key] →
+Dict.Ordered.subscript → Set.Ordered.index → Hash.Table.position →
+Buffer.Linear[Index<Value>]` has many more layers + refcount ops than
+the storage micro's direct dictionary access.
+
+**Methodological lesson** (worth promoting to a `[BENCH-NNN]` rule):
+isolated storage benches with pre-warmed caches **must be paired with
+an integration probe through the consumer's actual access path** before
+driving architecture decisions. The lesson generalises beyond swift-json
+to any institute consumer of multi-buffer storage primitives accessed
+through a Copyable wrapper.
+
+### Disposition
+
+- **L1 is empirically refuted.** Cannot outperform baseline at canonical
+  workload sizes while preserving Copyable Value.
+- **Rollback complete** in `swift-rfc-8259`. Tests 177/177 green;
+  bench numbers restored to baseline (parse 0.302 s/iter; lookup
+  3.18 ms/iter; 14.5× faster than Foundation on lookup).
+- **The v2 arc closes here.** swift-json is already 14× faster than
+  Foundation on lookup at the canonical workload, parity on parse.
+  No consumer is asking for more.
+- **L2 (~Copyable Value cascade) remains the documented option for a
+  future arc** if/when a specific consumer surfaces with a workload
+  whose profile is dominated by either tree teardown OR lookup at
+  large object sizes. Per [BENCH-010] / [RES-018], do not pursue
+  L2 speculatively.
+- **The bench harness** (`Experiments/parse-performance-bench`) retains
+  all four diagnostic modes (`floor`, `foundation`, `swift-json-*`,
+  `sanity`, `equiv`, `crossover`, `synthetic-lookup`, `size-dist`,
+  `lookup`) for future re-verification if a v2 candidate ever surfaces.
+
+### Generalisable institute-wide finding
+
+The structural lesson — **"Copyable wrapper + multi-buffer storage =
+refcount-per-copy cost dominates algorithmic O(1) gains at small N"**
+— is worth extracting as a separate Tier-2 research note in
+`swift-institute/Research/`. It applies anywhere the institute couples
+typed Copyable wrappers with multi-buffer hash storage and reads via
+pattern-match extract. The bench harness contains all the empirical
+evidence needed; the note's value is the cross-cutting principle.
 
 ## 11. L1-0 deeper measurement (v1.0.2)
 
