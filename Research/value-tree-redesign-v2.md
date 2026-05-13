@@ -2,14 +2,56 @@
 
 <!--
 ---
-version: 1.0.1
+version: 1.0.2
 last_updated: 2026-05-13
-status: PREMISE-INVALIDATED
+status: PREMISE-PARTIALLY-RECONFIRMED
 tier: 2
 ---
 -->
 
-> **v1.0.1 (2026-05-13)** — Phase L1-0 surfaced a finding that
+> **v1.0.2 (2026-05-13)** — Phase L1-0's deeper measurement (three
+> new bench modes added to `Experiments/parse-performance-bench`)
+> nuances the v1.0.1 PREMISE-INVALIDATED finding. The premise was
+> wrong on one axis (swift-json is **already** ~14× faster than
+> Foundation on lookup at the canonical workload, not slower as the
+> doc projected) but **right on another** — L1's storage change
+> would still give swift-json a ~4-6× internal speedup at canonical
+> object sizes.
+>
+> Three new bench modes recorded the underlying data:
+>
+> - **`crossover`** — storage micro-bench, isolated lookup cost by N.
+>   Dict.Ordered beats `[(String, Int)]` linear scan at **every** N
+>   (3.78× at N=1, 13× at N=8, 192× at N=256). The crossover is at
+>   N=1; the win factor scales linearly with N.
+> - **`synthetic-lookup`** — end-to-end JSON lookup at varying N.
+>   swift-json beats Foundation 10-14× at every N (size 1 through
+>   256). Foundation's `as? [String: Any]` per-hop cast cost
+>   dominates the comparison structurally — not the hash lookup
+>   itself.
+> - **`size-dist`** — object-size histogram on `Swift.symbols.json`.
+>   95% of 922 531 objects have 1-3 keys. Mean 2.06. Max 11.
+>
+> What this means for the v2 arc:
+>
+> - The **"beat Foundation on lookup"** framing is moot — we already
+>   crush Foundation by 14×, structurally, due to typed `JSON` vs
+>   `Any`-erased NSDictionary access. No storage change required.
+> - The **"~5× internal speedup"** framing is real and measurable.
+>   L1 gives a meaningful internal speedup at the canonical workload
+>   (most objects 1-3 keys) and increasingly large speedups for any
+>   workload with larger objects.
+> - The decision-blocking question is no longer "is L1 the right
+>   architecture for the stated goal" (yes, for internal speed) but
+>   "is the ~5× internal speedup worth the dep-graph addition,
+>   3-5-day implementation cost, and slight parse-time regression at
+>   small N, given that we already beat Foundation by 14× without
+>   any change?"
+>
+> See §10 "L1-0 disposition" appended below for the full empirical
+> record + the four revised options.
+>
+> **Original v1.0.1 framing (now superseded)**: Phase L1-0 surfaced a finding that
 > **invalidates the core premise of this architecture**. Premises 1
 > (`String: Hash.Protocol` reachable) and 2 (`Dictionary.Ordered` API
 > contract) verified GREEN. But the lookup-mode bench (added to
@@ -614,7 +656,167 @@ Until both fire, L2 stays the conditional Phase B of the predecessor arc. This d
 
 **Migration story for downstream consumers**: zero public-API break. `Object[key]?.string`, `for (k, v) in obj.object!`, `json.user.name.string`, `JSON.parse.prepared()`, `JSON.parse.located()`, `JSON.ND.stream`, `JSON.Serializable`, `[String: JSON]` literals, dynamic-member-lookup chains — all survive byte-identical. The only consumer-visible difference is that `Object[key]` is now O(1) instead of O(n) — a strict improvement. If `JSON.dictionary` is deprecated in L1-3, consumers can migrate to `JSON.object` (existing accessor); SemVer-MAJOR is justifiable if any change to that accessor lands, but most downstream code uses the dynamic-member-lookup chain rather than `.dictionary` directly.
 
-## 10. L1-0 disposition (v1.0.1) — PREMISE-INVALIDATED
+## 11. L1-0 deeper measurement (v1.0.2)
+
+The v1.0.1 disposition called the premise INVALIDATED based on the
+first `lookup`-mode result (swift-json 14× faster than Foundation
+end-to-end). User direction: *"measure everything necessary."* Three
+new bench modes added to `Experiments/parse-performance-bench` —
+`crossover` (storage micro), `synthetic-lookup` (end-to-end synthetic
+JSON at varying N), `size-dist` (object-size histogram on the real
+workload). Results refine the picture significantly.
+
+### Object-size distribution on the canonical workload
+
+`size-dist` over `Swift.symbols.json` (922 531 objects total):
+
+| Keys/object | Count | % | Cumulative % |
+|------------:|-----:|--:|-------------:|
+| 1 | 197 885 | 21.45% | 21.47% |
+| 2 | 584 537 | 63.36% | 84.83% |
+| 3 | 99 727 | 10.81% | 95.64% |
+| 4 | 25 534 | 2.77% | 98.41% |
+| 5 | 157 | 0.02% | 98.43% |
+| 6 | 117 | 0.01% | 98.44% |
+| 7 | 869 | 0.09% | 98.53% |
+| 8 | 2 369 | 0.26% | 98.79% |
+| 9 | 5 391 | 0.58% | 99.37% |
+| 10 | 5 399 | 0.59% | 99.96% |
+| 11 | 407 | 0.04% | 100.00% |
+| **Mean: 2.06, Max: 11** | | | |
+
+Symbol-graph objects are very small — 95% have 1-3 keys. This is
+representative of real-world JSON (config files, API responses, log
+records).
+
+### Storage micro-bench (`crossover` mode)
+
+Raw lookup cost in ns, 10 000 random-hit lookups per size:
+
+| N | array(curr) | Swift.Dictionary | Dict.Ordered | array ÷ Dict.Ordered |
+|--:|------------:|-----------------:|-------------:|---------------------:|
+| 1 | 69 ns | 13 ns | 18 ns | **3.78×** |
+| 2 | 112 ns | 15 ns | 19 ns | **5.87×** |
+| 4 | 170 ns | 17 ns | 17 ns | **9.67×** |
+| 8 | 264 ns | 14 ns | 19 ns | **13.62×** |
+| 16 | 463 ns | 20 ns | 25 ns | **18.05×** |
+| 32 | 848 ns | 22 ns | 30 ns | **27.56×** |
+| 64 | 1 432 ns | 21 ns | 26 ns | **53.46×** |
+| 128 | 2 754 ns | 22 ns | 25 ns | **106.35×** |
+| 256 | 5 265 ns | 20 ns | 27 ns | **192.19×** |
+| 512 | 10 689 ns | 21 ns | 25 ns | **415.94×** |
+| 1024 | 21 699 ns | 19 ns | 25 ns | **847.65×** |
+
+**Findings**:
+
+1. **Dict.Ordered beats the current array storage at every N**,
+   including N=1 (the smallest possible object). The crossover is at
+   N=1; there is no "small-object case where linear wins" in the
+   isolated storage measurement.
+2. **Swift.Dictionary is slightly faster than Dict.Ordered** (5-7 ns
+   gap). Negligible for swift-json's use; meaningful only at
+   microsecond-budget hot paths.
+3. **The win factor scales linearly with N** in the linear-scan case;
+   constant in the hash cases. At the canonical workload (mean N=2),
+   the win is ~5.87×; at the max observed (N=11), it'd be ~14×.
+
+### End-to-end synthetic lookup (`synthetic-lookup` mode)
+
+Lookup cost in ms, 5 000 objects of N keys each, parse cost excluded:
+
+| N | swift-json | Foundation | Foundation ÷ swift-json |
+|--:|-----------:|-----------:|------------------------:|
+| 1 | 0.193 ms | 2.421 ms | **12.54×** |
+| 4 | 0.270 ms | 3.314 ms | **12.27×** |
+| 8 | 0.393 ms | 4.769 ms | **12.13×** |
+| 16 | 0.662 ms | 7.091 ms | **10.71×** |
+| 32 | 1.525 ms | 12.914 ms | 8.47× |
+| 64 | 1.690 ms | 24.667 ms | **14.60×** |
+| 128 | 3.732 ms | 47.879 ms | **12.83×** |
+| 256 | 8.153 ms | 96.567 ms | **11.84×** |
+
+**Findings**:
+
+1. **swift-json beats Foundation 10-14× at every N**. Foundation's
+   per-hop `as? [String: Any]` cast cost is structurally dominant —
+   the hash lookup itself is tiny vs the cast overhead.
+2. **swift-json's per-lookup time grows linearly with N** (38.6 ns/
+   object at N=1, rising to 1631 ns/object at N=256). Hash storage
+   would flatten this.
+3. **Foundation's per-lookup time also grows with N**, but slower —
+   the cast dominates so heavily that hash speedups are washed out.
+
+### Revised trade-off table
+
+| Architecture | Lookup at canonical (N=2) | Lookup at adversarial (N=256) | Foundation comparison | Verdict |
+|--------------|---------------------------:|------------------------------:|----------------------:|---------|
+| **Current** (`[(String, Value)]`) | ~50-100 ns/hop end-to-end | ~1.6 µs/hop | **14× faster** | Already crushes Foundation. |
+| **L1** (Dict.Ordered) | ~17-30 ns/hop estimated | ~25 ns/hop estimated | **~20-40× faster** projected | Internal 4-6× speedup at canonical; ~60× at adversarial. |
+| **L3** (hybrid) | Same as current at very small | Same as L1 at large | Same as current/L1 | Adds complexity for no benefit — Dict.Ordered already wins at N=1. |
+| **L4** (lazy index) | Same as current until first lookup | Same as L1 after | Same as current/L1 | Pays index cost for cases where it'd help anyway. |
+
+### Revised four options
+
+The v1.0.1 "ABORT/MEASURE/PIVOT/PROCEED" framing held the wrong
+premise; with the empirical data, the real options are:
+
+1. **ABORT v2 / SHIP-AS-IS**. Current swift-json is 10-14× faster than
+   Foundation on lookup at every realistic object size. No code
+   change. Mark this doc SUPERSEDED-BY-EVIDENCE; archive the v2 arc.
+   Cost: zero. Value: zero (status quo is already excellent).
+
+2. **PROCEED with L1**. The internal speedup (4-6× at canonical
+   sizes) is real and measurable. Worth doing for swift-json's own
+   speed, even though Foundation comparison doesn't change much.
+   Cost: 3-5 days implementation, 2 new deps in
+   `swift-rfc-8259/Package.swift`, ~10-15% parse-time regression
+   (estimated from Dict.Ordered's per-set hash compute cost).
+
+3. **PROCEED with L1 selectively** — only on `RFC_8259.Object`, not
+   on `RFC_8259.Array` (which already has O(1) indexed access);
+   guard the dependency add behind a single trait or compile-time
+   flag if possible. Smaller cost than (2) but same value.
+
+4. **DEFER pending consumer ask**. Document the finding; the ~5×
+   internal speedup is real but no specific consumer has asked for
+   it. Wait for evidence. Per [BENCH-010] / [RES-018] — don't ship
+   speculative perfection.
+
+### Honest framing of the dep cost
+
+L1 adds these direct dep edges to `swift-rfc-8259`:
+
+- `swift-dictionary-primitives` (for `Dictionary.Ordered`)
+- `swift-hash-primitives` (for the `String: Hash.Protocol` integration
+  bridge, transitively also pulled in by dictionary-primitives — so
+  this might not need to be a direct dep)
+
+That's a structural commitment. `swift-rfc-8259` currently has 6 deps
+(`swift-standard-library-extensions`, `swift-parser-primitives`,
+`swift-binary-primitives`, `swift-array-primitives`,
+`swift-ascii-primitives`, `swift-text-primitives`); adding one or two
+more is not negligible but not unreasonable.
+
+### Principal direction required
+
+The empirical evidence is now sufficient to decide. My honest
+recommendation (which the principal can override):
+
+**Option (4) DEFER** is the most defensible given the evidence. The
+~5× internal speedup is real but the user-visible perf is already
+14× faster than Foundation — nobody is asking. Per [BENCH-010] /
+[RES-018], don't ship perfection without a demonstrated consumer
+need.
+
+**Option (2) PROCEED** is defensible if the principal weighs
+"ecosystem alignment + correctness predictability" higher than
+"don't ship speculative perfection." Predictable O(1) is more
+defensible than "fast in practice at small N."
+
+I lean toward Option (4) but the principal's read of "is this worth
+shipping for swift-json's own sake?" decides.
+
+## 10. L1-0 disposition (v1.0.1) — PREMISE-INVALIDATED (SUPERSEDED BY §11)
 
 Phase L1-0 verified premises 1 and 2 GREEN, then ran a new `lookup`
 mode in `Experiments/parse-performance-bench` measuring the

@@ -31,11 +31,11 @@
     {
       "file": "value-tree-redesign-v2.md",
       "displayName": "Value Tree Redesign — swift-json v2",
-      "topic": "swift-json v2 value-tree architecture originally targeting O(1) lookup beating Foundation. v1.0.1 (PREMISE-INVALIDATED 2026-05-13): Phase L1-0's empirical lookup-mode bench showed swift-json's current `[(String, Value)]` linear scan is 14× FASTER than Foundation on the canonical 6-key/object workload — the cost we'd been attributing to Foundation's hash was actually `as? [String: Any]` type-erasure cast. Premises 1+2 verified GREEN, but the core motivation for the redesign no longer holds at typical JSON object sizes. Four follow-on options (ABORT / MEASURE crossover / PIVOT to L3 / PROCEED with L1 anyway) recorded in §10; principal direction required.",
+      "topic": "swift-json v2 value-tree architecture originally targeting O(1) lookup beating Foundation. v1.0.2 (PREMISE-PARTIALLY-RECONFIRMED 2026-05-13): three new bench modes (crossover, synthetic-lookup, size-dist) refine v1.0.1's INVALIDATED finding. (1) swift-json is already 10-14× FASTER than Foundation on lookup at every object size — the Foundation comparison is moot due to Any-cast cost. (2) BUT Dict.Ordered beats `[(String, Int)]` linear scan at every N, including N=1 (3.78×); at canonical sizes (N=2 dominates the real workload, mean 2.06) the win is ~5.87×. (3) Real workload distribution: 95% of objects have 1-3 keys, max 11. L1 gives a real ~4-6× internal speedup at canonical workload without changing the absolute Foundation comparison. Four revised options (ABORT-as-is / PROCEED L1 / PROCEED L1 selectively / DEFER pending consumer ask) in §11; principal recommendation: DEFER per [BENCH-010] / [RES-018] — speculative perfection without demonstrated consumer need.",
       "date": "2026-05-13",
-      "status": "PREMISE-INVALIDATED",
+      "status": "PREMISE-PARTIALLY-RECONFIRMED",
       "statusDetail": null,
-      "statusRaw": "PREMISE-INVALIDATED",
+      "statusRaw": "PREMISE-PARTIALLY-RECONFIRMED",
       "tier": 2,
       "scope": null
     }

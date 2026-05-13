@@ -46,13 +46,17 @@ let package = Package(
     name: "parse-performance-bench",
     platforms: [.macOS(.v26)],
     dependencies: [
-        .package(path: "../..")
+        .package(path: "../.."),
+        .package(path: "../../../../swift-primitives/swift-dictionary-primitives"),
+        .package(path: "../../../../swift-primitives/swift-hash-primitives")
     ],
     targets: [
         .executableTarget(
             name: "parse-performance-bench",
             dependencies: [
-                .product(name: "JSON", package: "swift-json")
+                .product(name: "JSON", package: "swift-json"),
+                .product(name: "Dictionary Ordered Primitives", package: "swift-dictionary-primitives"),
+                .product(name: "Hash Primitives", package: "swift-hash-primitives")
             ]
         )
     ]

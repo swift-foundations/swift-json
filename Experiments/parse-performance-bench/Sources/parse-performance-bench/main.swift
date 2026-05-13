@@ -10,6 +10,8 @@
 
 import Foundation
 import JSON
+import Dictionary_Ordered_Primitives
+import Hash_Primitives
 
 func mono() -> Double {
     var ts = timespec()
@@ -95,6 +97,177 @@ if mode == "all" || mode == "swift-json-bytes" {
         _ = try JSON.parse(bytesForm)
     }
     report("swift-json JSON.parse([UInt8])", mono() - t0)
+}
+
+// CROSSOVER mode: storage micro-bench. For each object size N in
+// {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024} build a representative
+// (key, value) container in three storage shapes and measure raw
+// lookup throughput. Pre-randomised lookup keys; tight loop; minimal
+// overhead. Answers: at what N does Dictionary.Ordered beat the
+// current [(String, Value)] linear scan? At what N does it beat
+// Swift.Dictionary?
+if mode == "crossover" {
+    print("=== CROSSOVER: storage micro-bench by object size ===")
+    print("Per-row: ns/lookup at object-size N, over 10 000 lookups against random hit keys.")
+    print("")
+    let sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
+    let nLookups = 10_000
+    print(pad("size", 6), pad("array(curr)", 14), pad("Swift.Dict", 14), pad("Dict.Ordered", 14), pad("array/Ordered", 14))
+    for size in sizes {
+        // Pre-generate keys; "k_NNN" pattern roughly matches real-world short keys.
+        let keys = (0..<size).map { "k_\($0)" }
+        let values = (0..<size).map { $0 }
+        let array: [(String, Int)] = zip(keys, values).map { ($0.0, $0.1) }
+        let swiftDict: Swift.Dictionary<String, Int> = Swift.Dictionary(uniqueKeysWithValues: zip(keys, values).map { ($0, $1) })
+        var orderedDict = Dictionary<String, Int>.Ordered()
+        for (k, v) in zip(keys, values) { orderedDict.set(k, v) }
+
+        // Pre-generate lookup keys (always hits).
+        var rng = SystemRandomNumberGenerator()
+        let lookupKeys: [String] = (0..<nLookups).map { _ in keys[Int.random(in: 0..<size, using: &rng)] }
+
+        // Bench: array linear scan
+        let t0 = mono()
+        var sinkA = 0
+        for k in lookupKeys {
+            if let v = array.first(where: { $0.0 == k })?.1 { sinkA &+= v }
+        }
+        let tA = mono() - t0
+        if sinkA == 0 { print("(DCE A)") }
+
+        // Bench: Swift.Dictionary
+        let t1 = mono()
+        var sinkS = 0
+        for k in lookupKeys {
+            if let v = swiftDict[k] { sinkS &+= v }
+        }
+        let tS = mono() - t1
+        if sinkS == 0 { print("(DCE S)") }
+
+        // Bench: Dictionary.Ordered
+        let t2 = mono()
+        var sinkO = 0
+        for k in lookupKeys {
+            if let v = orderedDict[k] { sinkO &+= v }
+        }
+        let tO = mono() - t2
+        if sinkO == 0 { print("(DCE O)") }
+
+        // ns/lookup
+        let nsA = Int(tA * 1e9 / Double(nLookups))
+        let nsS = Int(tS * 1e9 / Double(nLookups))
+        let nsO = Int(tO * 1e9 / Double(nLookups))
+        let ratio = String(format: "%.2f×", tA / tO)
+        print(pad("\(size)", 6), pad("\(nsA) ns", 14), pad("\(nsS) ns", 14), pad("\(nsO) ns", 14), pad(ratio, 14))
+    }
+    print("")
+    print("Reading: where Dict.Ordered < array(curr), the storage change wins on that size.")
+    print("Where array/Ordered > 1, the linear scan is faster than Dict.Ordered.")
+}
+
+// SYNTHETIC-LOOKUP mode: build a JSON document of `iters` objects each
+// with N keys, parse with both parsers, time the lookup pass. Mirrors
+// the canonical workload but lets us scale N to find the end-to-end
+// crossover including the Any-cast cost in Foundation's path.
+if mode == "synthetic-lookup" {
+    print("=== SYNTHETIC-LOOKUP: end-to-end at varying object size ===")
+    print("Per-row: lookup ms (parse excluded) for swift-json vs Foundation at object-size N, summed over 5000 objects.")
+    print("")
+    let sizes = [1, 4, 8, 16, 32, 64, 128, 256]
+    let nObjects = 5_000
+    print(pad("size", 6), pad("swift-json", 12), pad("Foundation", 12), pad("Fnd/swift-json", 16))
+    for size in sizes {
+        // Build a JSON string: an array of N-key objects.
+        // Each object: {"k_0":0, "k_1":1, ..., "k_{N-1}":N-1}
+        var doc = "["
+        for i in 0..<nObjects {
+            if i > 0 { doc.append(",") }
+            doc.append("{")
+            for j in 0..<size {
+                if j > 0 { doc.append(",") }
+                doc.append("\"k_\(j)\":\(j)")
+            }
+            doc.append("}")
+        }
+        doc.append("]")
+        let docData = Data(doc.utf8)
+
+        let sjRoot = try JSON.parse(doc)
+        let fnRoot = try JSONSerialization.jsonObject(with: docData, options: []) as! [Any]
+
+        guard let sjArr = sjRoot.array else { print("sj array missing"); continue }
+
+        // Lookup: read `k_0` from every object (single hop).
+        // Single lookup per object isolates the lookup cost from
+        // multi-hop chain noise.
+        let lookupKey = "k_0"
+
+        let t0 = mono()
+        var sinkSJ: Int = 0
+        for o in sjArr {
+            if let i = Int(o[lookupKey]) {
+                sinkSJ &+= i
+            }
+        }
+        let tSJ = mono() - t0
+        if sinkSJ == 0 { print("(DCE SJ)") }
+
+        let t1 = mono()
+        var sinkFN: Int = 0
+        for o in fnRoot {
+            if let dict = o as? [String: Any], let i = dict[lookupKey] as? Int {
+                sinkFN &+= i
+            }
+        }
+        let tFN = mono() - t1
+        if sinkFN == 0 { print("(DCE FN)") }
+
+        let msSJ = String(format: "%.3f ms", tSJ * 1000)
+        let msFN = String(format: "%.3f ms", tFN * 1000)
+        let ratio = String(format: "%.2f×", tFN / tSJ)
+        print(pad("\(size)", 6), pad(msSJ, 12), pad(msFN, 12), pad(ratio, 16))
+    }
+}
+
+// SIZE-DIST mode: walk the parsed swift-json tree once and build a
+// histogram of object sizes. Answers: what's the actual distribution
+// of keys-per-object in this real-world workload?
+if mode == "size-dist" {
+    print("=== SIZE-DIST: object-size histogram for the input ===")
+    let root = try JSON.parse(stringForm)
+    var sizeHistogram: [Int: Int] = [:]
+    var totalObjects: Int = 0
+    var totalKeys: Int = 0
+    var maxSize: Int = 0
+
+    func walk(_ json: JSON) {
+        if let obj = json.object {
+            let n = obj.count
+            sizeHistogram[n, default: 0] &+= 1
+            totalObjects &+= 1
+            totalKeys &+= n
+            if n > maxSize { maxSize = n }
+            for (_, v) in obj { walk(v) }
+        } else if let arr = json.array {
+            for v in arr { walk(v) }
+        }
+    }
+    walk(root)
+
+    let mean = Double(totalKeys) / Double(totalObjects)
+    print("Total objects: \(totalObjects)")
+    print("Total keys:    \(totalKeys)")
+    print("Mean keys/object: \(String(format: "%.2f", mean))")
+    print("Max keys/object:  \(maxSize)")
+    print("")
+    print(pad("size", 6), pad("count", 10), pad("% of total", 12), "histogram")
+    let sortedSizes = sizeHistogram.keys.sorted()
+    for s in sortedSizes {
+        let count = sizeHistogram[s]!
+        let pct = 100.0 * Double(count) / Double(totalObjects)
+        let bar = String(repeating: "#", count: min(Int(pct / 2.0), 50))
+        print(pad("\(s)", 6), pad("\(count)", 10), pad(String(format: "%.2f%%", pct), 12), bar)
+    }
 }
 
 // LOOKUP mode: measures the lookup-heavy traversal pattern that the
