@@ -7,6 +7,22 @@
   "scope": "swift-foundations/swift-json",
   "experiments": [
     {
+      "directory": "parse-performance-bench",
+      "category": "measurement-and-verification",
+      "purpose": "Standing parse-performance + tree-equivalence harness for swift-json. Two complementary modes: (1) wall-clock benches comparing `JSON.parse(String)` / `JSON.parse([UInt8])` against `Foundation.JSONSerialization` and against pure byte-iteration floors; (2) `sanity` / `equiv` modes that prove both parsers produce structurally-equivalent trees (top-level keys, symbols.count, relationships.count, module.name, symbols[0].kind.identifier, relationships[0].kind, deep pathComponents — all match). Used as the measurement gate for Tiers 0/1/3/4 of the parse-performance arc.",
+      "date": "2026-05-13",
+      "toolchain": "Apple Swift 6.3+",
+      "status": "STANDING",
+      "statusDetail": "Last reading on 86 MB Swift.symbols.json, release, macOS 26 arm64, 3-iter average: Foundation.JSONSerialization 0.299s; swift-json JSON.parse([UInt8]) 0.304s (1.02× Foundation); swift-json JSON.parse(String) 0.316s (1.06× Foundation). Tree equivalence verified across 7 fields (counts, top-level keys, kind discriminators, deep pathComponents). Used as the empirical gate for `parse-performance.md` v1.2.0 DECISION and `parse-performance-architecture.md` v1.0.2 DECISION.",
+      "statusRaw": "STANDING",
+      "crossRefs": [
+        "swift-foundations/swift-json/Research/parse-performance.md",
+        "swift-foundations/swift-json/Research/parse-performance-architecture.md",
+        "swift-foundations/swift-json/Experiments/parse-performance-tier-4-feasibility/",
+        "swift-foundations/swift-json/Experiments/symbol-graph-conformance-oracle/"
+      ]
+    },
+    {
       "directory": "parse-performance-tier-4-feasibility",
       "category": "compiler-binding-verification",
       "purpose": "Phase A0 feasibility spike for `swift-foundations/swift-json/Research/parse-performance-architecture.md` v1.0.0 (Tier 4 Span-cursor design). Two independent compiler-binding checks: (1) `check-contiguous-storage` verifies `String.UTF8View.withContiguousStorageIfAvailable` engagement across String shapes; (2) `check-span-typed-throws` verifies `Span<UInt8>` + `throws(E)` + `@_lifetime(borrow bytes)` composition for the proposed `RFC_8259.Lexer.Span` cursor shape.",
