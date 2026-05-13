@@ -16,6 +16,17 @@
       "statusRaw": "RECOMMENDATION",
       "tier": 1,
       "scope": null
+    },
+    {
+      "file": "parse-performance-architecture.md",
+      "displayName": "Parse Performance Architecture — Tier 4",
+      "topic": "Tier-4 architecture design: Span<UInt8>-specialized internal lexer for RFC_8259 to reach ≤1.3× Foundation on stdlib-scale inputs. Enumerates three architectures (Span + existing tree; Span + arena tree; RawSpan + table + lazy + arena), recommends Architecture A (internal Span cursor mirroring Binary.Bytes.Input.View, lazy position computation, dispatch fork in RFC_8259.Decode), with conditional Phase B arena tree as a separate arc if measurement gate trips.",
+      "date": "2026-05-13",
+      "status": "RECOMMENDATION",
+      "statusDetail": null,
+      "statusRaw": "RECOMMENDATION",
+      "tier": 2,
+      "scope": null
     }
   ],
   "narrativeSections": [
