@@ -9,9 +9,15 @@ Outputs/swift-stdlib/
 # The Outputs/run-*.txt reports contain the human-readable evidence.
 Outputs/conformance-oracle.json
 
-# Per-run Swift table output; the canonical consumed copy lives in
+# Per-run Swift table outputs; the canonical consumed copy lives in
 # swift-linter-rules at Sources/Linter Rule Idiom/Lint.Rule.Idiom.RedundantRefinement.StdlibRefinementsTable.swift.
 Outputs/StdlibRefinementsTable.swift
+
+# User-domain Swift table; derivative artifact. The user-domain
+# rule consumption requires path-aware matching (see findings) and
+# is not yet productionized — the per-run table is informational
+# only.
+Outputs/UserDomainRefinementsTable.swift
 
 # Stray run-stdlib variants from interactive sessions (the canonical run
 # log is Outputs/run-stdlib.txt).
