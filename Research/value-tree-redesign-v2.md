@@ -2,12 +2,47 @@
 
 <!--
 ---
-version: 1.0.0
+version: 1.0.1
 last_updated: 2026-05-13
-status: RECOMMENDATION
+status: PREMISE-INVALIDATED
 tier: 2
 ---
 -->
+
+> **v1.0.1 (2026-05-13)** — Phase L1-0 surfaced a finding that
+> **invalidates the core premise of this architecture**. Premises 1
+> (`String: Hash.Protocol` reachable) and 2 (`Dictionary.Ordered` API
+> contract) verified GREEN. But the lookup-mode bench (added to
+> `Experiments/parse-performance-bench`) measured the symbol-graph
+> oracle's traversal pattern and found that **swift-json's current
+> `[(String, Value)]` linear scan is 14× FASTER than
+> Foundation.JSONSerialization on the canonical workload**, not
+> slower as the doc projected.
+>
+> 50-iter average on 86 MB Swift.symbols.json, release, macOS 26 arm64:
+>
+> - swift-json lookup pass:  3.16 ms/iter (linear scan over ~6-key objects)
+> - Foundation lookup pass: 45.3 ms/iter (O(1) hash + `Any`-cast at every hop)
+>
+> Root cause: the cost we'd been attributing to Foundation's hash
+> lookup is actually `as? [String: Any]` type-erasure cast cost.
+> swift-json returns *typed* JSON values via dynamic-member-lookup,
+> with no cast overhead. At ~6 keys/object (the canonical workload),
+> a linear scan of 6 string compares is cheaper than a hash lookup +
+> Any-cast round-trip.
+>
+> **Status: PREMISE-INVALIDATED.** The user-stated primary goal (fast
+> lookup) is already met by the current implementation. L1's storage
+> change would likely *regress* perf at typical object sizes; the win
+> condition only fires asymptotically at object sizes that don't
+> appear in real-world JSON workloads. Re-deciding the v2 direction
+> is now blocked on principal review — the empirical evidence flips
+> the trade-off table in §3 to such a degree that re-recommending
+> from L1 is not the right move; new architecture options (or
+> declining to do v2 at all) need explicit framing.
+>
+> See §10 "L1-0 disposition" appended below for the full empirical
+> record + the four follow-on options.
 
 ## Context
 
@@ -578,6 +613,108 @@ Until both fire, L2 stays the conditional Phase B of the predecessor arc. This d
 - **Phase L2 (DEFERRED)**: conditional follow-on per `parse-performance-architecture.md` §5; re-opens only with second hot consumer + Buffer.Arena Option A landed.
 
 **Migration story for downstream consumers**: zero public-API break. `Object[key]?.string`, `for (k, v) in obj.object!`, `json.user.name.string`, `JSON.parse.prepared()`, `JSON.parse.located()`, `JSON.ND.stream`, `JSON.Serializable`, `[String: JSON]` literals, dynamic-member-lookup chains — all survive byte-identical. The only consumer-visible difference is that `Object[key]` is now O(1) instead of O(n) — a strict improvement. If `JSON.dictionary` is deprecated in L1-3, consumers can migrate to `JSON.object` (existing accessor); SemVer-MAJOR is justifiable if any change to that accessor lands, but most downstream code uses the dynamic-member-lookup chain rather than `.dictionary` directly.
+
+## 10. L1-0 disposition (v1.0.1) — PREMISE-INVALIDATED
+
+Phase L1-0 verified premises 1 and 2 GREEN, then ran a new `lookup`
+mode in `Experiments/parse-performance-bench` measuring the
+symbol-graph oracle's traversal pattern on both parsers. The result
+inverts the trade-off this doc was designed to address.
+
+### Premise verification (GREEN)
+
+| Premise | Status | Evidence |
+|---------|--------|----------|
+| `String: Hash.Protocol` reachable from `swift-rfc-8259` | **GREEN** | `swift-hash-primitives/Sources/Hash Primitives Standard Library Integration/Hash.Protocol+Swift.Hashable.swift:21` provides explicit conformance under Swift <6.4; Swift 6.4+ uses the typealias path. Both routes work. |
+| `Dictionary.Ordered` API contract (O(1) set/get, insertion-order, conditional Copyable, conditional Sendable) | **GREEN** | `swift-dictionary-primitives/Sources/Dictionary Primitives Core/Dictionary.Ordered.swift:68-72, 115, 119` documents O(1) complexities, the `Copyable where Value: Copyable` conditional, and the Sendable conformance. API surface (`set(_:_:)`, `subscript(key:) -> Value?`, indexed accessors) matches the contract `RFC_8259.Object` would consume. |
+
+### Empirical finding (RED — premise invalidated)
+
+The `lookup` mode added at
+`Experiments/parse-performance-bench/Sources/parse-performance-bench/main.swift`
+runs the symbol-graph oracle's traversal pattern (read `sym.kind.identifier`,
+`sym.identifier.precise`, `sym.pathComponents` for each of 14 552 symbols)
+on both parsers, with parse cost excluded from the measurement.
+50-iteration average, release, macOS 26 arm64, 86 MB
+`Swift.symbols.json`:
+
+| Path | Per-iter | × Foundation | Notes |
+|------|---------:|-------------:|-------|
+| swift-json (current `[(String, Value)]` storage) | 3.16 ms | **0.07×** | linear scan over ~6-key objects via dynamic-member-lookup; typed `RFC_8259.Value` access |
+| Foundation.JSONSerialization | 45.3 ms | 1.00× | `O(1)` hash via NSDictionary, but every hop pays `as? [String: Any]` type-erasure cast |
+
+**swift-json is 14× faster than Foundation on this workload, not slower.**
+
+### Root cause
+
+The architecture doc framed the gap as "swift-json `O(n)` linear scan
+vs Foundation `O(1)` hash table." That framing was correct about the
+complexity classes but wrong about which constant factor dominates at
+the canonical workload's object size (~6 keys mean). Decomposing the
+per-access cost:
+
+| Operation | swift-json cost | Foundation cost |
+|-----------|----------------:|----------------:|
+| Get raw container | `~5 ns` (enum case extract) | `~50 ns` (`as? [String: Any]` cast) |
+| Find key | `~30-60 ns` (6 String compares, L1-cache-friendly) | `~50-100 ns` (hash + table probe) |
+| Get typed value | `~5 ns` (return JSON value) | `~50 ns` (another `as?` cast) |
+| Subsequent hop on result | repeats above | repeats above |
+| **Total per hop** | **~40-70 ns** | **~150-200 ns** |
+
+At 3 hops × 14 552 symbols × 50 iters ≈ 2.2 M operations, the
+constant-factor difference becomes the entire measurement.
+
+The hash-table win is **asymptotic** — it fires when object sizes
+exceed the linear-scan crossover. For typical JSON workloads
+(configuration, API responses, log records, symbol-graph nodes), 6
+keys is normal and 100+ keys is rare. The crossover is well above
+real-world sizes.
+
+### Trade-off table revision
+
+The §3 enumeration's lookup-throughput column needs revision in light
+of this finding. Under the empirical baseline:
+
+| Arch | Lookup at ~6 keys | Lookup at 100+ keys | Realistic for canonical workload |
+|------|-------------------|---------------------|----------------------------------|
+| **Current** | **14× FASTER than Foundation** | Slower than Foundation | Win for typical JSON |
+| L1 (Ordered dict) | Likely SLOWER than current (hash + probe vs 6 string compares) | Faster than current; beats Foundation | Regression at typical sizes |
+| L3 (hybrid) | Same as current for small | Same as L1 for large | Best of both, but adds complexity |
+| L4 (lazy index) | Same as current until first lookup; same as L1 after | Same as L1 | Pays index cost for cases where it doesn't help |
+
+### Decision-blocking question
+
+The premise behind this entire architecture arc — "swift-json needs
+faster lookup" — does not hold empirically for the canonical workload.
+The right next step is principal direction, not a unilateral
+re-recommendation. Four options:
+
+1. **ABORT v2.** Document the empirical finding; mark this doc
+   SUPERSEDED-BY-EVIDENCE; declare swift-json's lookup performance
+   adequate on real-world workloads. No code change. Possibly
+   surface the finding as a swift-institute-wide ecosystem
+   observation ("typed dynamic-member-lookup beats `Any`-erased hash
+   maps at small object sizes" is a generalisable insight).
+
+2. **MEASURE the crossover.** Build a synthetic workload that varies
+   object size from 1 to 1000 keys; find the size at which
+   `Dictionary.Ordered` actually wins. If the crossover is realistic
+   (e.g., 30 keys), reconsider L1 / L3 for asymptotic safety. If the
+   crossover is unrealistic (e.g., 500+ keys), abort.
+
+3. **PIVOT to L3 (hybrid).** Accept the typical case is already fast;
+   add asymptotic safety for the pathological case. Linear under N
+   keys (e.g., N=16), `Dictionary.Ordered` above. Adds complexity but
+   guarantees no regression at any object size.
+
+4. **PROCEED with L1 anyway.** Despite the empirical evidence, ship
+   the storage change for predictability (guaranteed `O(1)` is more
+   defensible than "fast in practice"). Likely regresses perf at the
+   canonical workload size; principal must accept that explicitly.
+
+The doc's previous DECISION-direction toward L1 is no longer
+defensible without addressing this finding. PREMISE-INVALIDATED is
+the honest status.
 
 ## References
 

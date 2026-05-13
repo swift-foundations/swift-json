@@ -31,11 +31,11 @@
     {
       "file": "value-tree-redesign-v2.md",
       "displayName": "Value Tree Redesign — swift-json v2",
-      "topic": "swift-json v2 value-tree architecture targeting O(1) lookup beating Foundation on lookup-heavy workloads (canonical: symbol-graph oracle's symbol.kind.identifier traversal pattern over 14 552 symbols). Enumerates four architectures: L1 (Ordered dict, Copyable Value — recommended), L2 (~Copyable arena-bound Value tree), L3 (hybrid small/large), L4 (lazy index). Recommends L1: replace RFC_8259.Object._storage with Dictionary<String, Value>.Ordered from swift-dictionary-primitives; preserves entire public API surface; consumes witness-primitive triple transitively via Hash Primitives Standard Library Integration. L2 stays parked as the predecessor's conditional Phase B, re-opens only with a second hot consumer + Buffer.Arena Option A landed. Phased plan: L1-0 verification + lookup-bench mode (½ day), L1-1 storage replacement (3–5 days), L1-2 measurement gate, L1-3 conditional cleanup.",
+      "topic": "swift-json v2 value-tree architecture originally targeting O(1) lookup beating Foundation. v1.0.1 (PREMISE-INVALIDATED 2026-05-13): Phase L1-0's empirical lookup-mode bench showed swift-json's current `[(String, Value)]` linear scan is 14× FASTER than Foundation on the canonical 6-key/object workload — the cost we'd been attributing to Foundation's hash was actually `as? [String: Any]` type-erasure cast. Premises 1+2 verified GREEN, but the core motivation for the redesign no longer holds at typical JSON object sizes. Four follow-on options (ABORT / MEASURE crossover / PIVOT to L3 / PROCEED with L1 anyway) recorded in §10; principal direction required.",
       "date": "2026-05-13",
-      "status": "RECOMMENDATION",
+      "status": "PREMISE-INVALIDATED",
       "statusDetail": null,
-      "statusRaw": "RECOMMENDATION",
+      "statusRaw": "PREMISE-INVALIDATED",
       "tier": 2,
       "scope": null
     }

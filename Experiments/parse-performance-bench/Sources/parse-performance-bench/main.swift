@@ -97,6 +97,88 @@ if mode == "all" || mode == "swift-json-bytes" {
     report("swift-json JSON.parse([UInt8])", mono() - t0)
 }
 
+// LOOKUP mode: measures the lookup-heavy traversal pattern that the
+// symbol-graph oracle uses. Parses the file ONCE per parser, then runs
+// the access pattern `iters` times. Wall-clock excludes parse; lookup
+// throughput is what's reported.
+//
+// The access pattern mirrors `symbol-graph-conformance-oracle`:
+//   for each symbol in root.symbols:
+//     - read .kind.identifier
+//     - read .identifier.precise
+//     - read .pathComponents (array length only — counts the inner reads)
+//
+// Establishes the pre-L1-1 baseline for v2 architecture's measurement
+// gate. Re-run after the storage change in L1-1 to verify the gap
+// closed.
+if mode == "lookup" {
+    print("=== LOOKUP: parse once, traverse N times ===")
+    print("(Parse times excluded from lookup measurement; tree built once per parser.)")
+    print("")
+
+    // Parse once with each. Time the parses themselves separately for
+    // context, but the LOOKUP measurement is just the traversal loop.
+    let pT0 = mono()
+    let sjRoot = try JSON.parse(stringForm)
+    let pT1 = mono()
+    let fnRoot = try JSONSerialization.jsonObject(with: data, options: []) as! [String: Any]
+    let pT2 = mono()
+    report("(once)  swift-json parse", pT1 - pT0)
+    report("(once)  Foundation parse", pT2 - pT1)
+    print("")
+
+    // Pre-cache the symbols arrays so we don't repeat the top-level lookup.
+    guard let sjSymbols = sjRoot.symbols.array,
+          let fnSymbols = fnRoot["symbols"] as? [Any] else {
+        print("symbols array missing")
+        exit(1)
+    }
+    let symbolCount = sjSymbols.count
+    guard symbolCount == fnSymbols.count else {
+        print("symbol counts diverge: swift-json=\(symbolCount) Foundation=\(fnSymbols.count)")
+        exit(1)
+    }
+    print("symbol count: \(symbolCount)")
+    print("")
+
+    // swift-json traversal
+    do {
+        let t0 = mono()
+        var sink: Int = 0
+        for _ in 0..<iters {
+            for sym in sjSymbols {
+                if sym.kind.identifier.isString { sink &+= 1 }
+                if sym.identifier.precise.isString { sink &+= 1 }
+                if let pc = sym.pathComponents.array { sink &+= pc.count }
+            }
+        }
+        if sink == 0 { print("(DCE)") }
+        report("swift-json lookup pass (×\(iters))", mono() - t0)
+    }
+
+    // Foundation traversal — same shape, Any-cast at each hop
+    do {
+        let t0 = mono()
+        var sink: Int = 0
+        for _ in 0..<iters {
+            for sym in fnSymbols {
+                guard let symDict = sym as? [String: Any] else { continue }
+                if let kind = symDict["kind"] as? [String: Any],
+                   kind["identifier"] is String { sink &+= 1 }
+                if let ident = symDict["identifier"] as? [String: Any],
+                   ident["precise"] is String { sink &+= 1 }
+                if let pc = symDict["pathComponents"] as? [Any] { sink &+= pc.count }
+            }
+        }
+        if sink == 0 { print("(DCE)") }
+        report("Foundation lookup pass (×\(iters))", mono() - t0)
+    }
+
+    print("")
+    print("Equivalent reads per iteration: 3 × \(symbolCount) = \(3 * symbolCount)")
+    print("Total reads over \(iters) iters: \(3 * symbolCount * iters)")
+}
+
 // SANITY mode: verify both parsers actually built the tree by extracting
 // known fields. Run with `... 1 sanity` to engage.
 if mode == "sanity" {
