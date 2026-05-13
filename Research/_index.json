@@ -9,22 +9,22 @@
     {
       "file": "parse-performance.md",
       "displayName": "Parse Performance",
-      "topic": "RFC_8259 text-parser hotspots at stdlib-scale inputs; debug vs release framing, allocation reduction, Span-cursor path; v1.1.0 records measured −27% wall-clock after Tiers 0/1/3 landing",
+      "topic": "RFC_8259 text-parser hotspots at stdlib-scale inputs; debug vs release framing, allocation reduction, Span-cursor path. v1.2.0 (DECISION): Tier 4 LANDED — Foundation parity achieved (1.02× on bytes, 1.06× on String). Tiers 2/5 remain HELD pending second hot consumer.",
       "date": "2026-05-13",
-      "status": "RECOMMENDATION",
+      "status": "DECISION",
       "statusDetail": null,
-      "statusRaw": "RECOMMENDATION",
+      "statusRaw": "DECISION",
       "tier": 1,
       "scope": null
     },
     {
       "file": "parse-performance-architecture.md",
       "displayName": "Parse Performance Architecture — Tier 4",
-      "topic": "Tier-4 architecture design: Span<UInt8>-specialized internal lexer for RFC_8259 to reach ≤1.3× Foundation on stdlib-scale inputs. Enumerates three architectures (Span + existing tree; Span + arena tree; RawSpan + table + lazy + arena), recommends Architecture A (internal Span cursor mirroring Binary.Bytes.Input.View, lazy position computation, dispatch fork in RFC_8259.Decode), with conditional Phase B arena tree as a separate arc if measurement gate trips. v1.0.1: Phase A0 GREEN — all three premises confirmed via Experiments/parse-performance-tier-4-feasibility/; bridged NSString hits the fast path too (more favourable than projected).",
+      "topic": "Tier-4 architecture design: Span<UInt8>-specialized internal lexer for RFC_8259 to reach ≤1.3× Foundation on stdlib-scale inputs. Enumerates three architectures, recommends Architecture A (internal Span cursor mirroring Binary.Bytes.Input.View, lazy position with cache-on-first-access, dispatch fork in RFC_8259.Decode). v1.0.2 (DECISION): Phase A1 LANDED, A2 measurement gate PASSED — bytes 1.02× Foundation, String 1.06×, both well below 1.3× target. Phase B (arena tree) NOT triggered. Naming refinement (RFC_8259.Span.Lexer over RFC_8259.Lexer.Span) and three optimisations beyond spec recorded in §9.",
       "date": "2026-05-13",
-      "status": "RECOMMENDATION",
+      "status": "DECISION",
       "statusDetail": null,
-      "statusRaw": "RECOMMENDATION",
+      "statusRaw": "DECISION",
       "tier": 2,
       "scope": null
     }

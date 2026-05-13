@@ -2,13 +2,26 @@
 
 <!--
 ---
-version: 1.1.0
+version: 1.2.0
 last_updated: 2026-05-13
-status: RECOMMENDATION
+status: DECISION
 tier: 1
 ---
 -->
 
+> **v1.2.0 (2026-05-13)**: **Tier 4 LANDED. Foundation parity
+> achieved.** Release-mode 86 MB parse: 0.67 s → 0.304 s on the
+> `[UInt8]` path (1.02× Foundation) and 0.316 s on the `String` path
+> (1.06× Foundation). Implementation lives at
+> `swift-ietf/swift-rfc-8259/Sources/RFC 8259/RFC_8259.{Lexer,Parser}.Span*.swift`;
+> the public API surface is unchanged; the generic
+> `RFC_8259.Parser<Input>` slow path is preserved for non-contiguous
+> inputs. Full A1 measured outcomes + design refinements recorded
+> at `parse-performance-architecture.md` v1.0.2 §9. Status upgraded
+> RECOMMENDATION → DECISION. Tiers 2 (ASCII.Decimal.Parser) and 5
+> (Input.Borrowed) remain HELD; no further work planned absent a
+> second hot consumer surfacing.
+>
 > **v1.1.0 (2026-05-13)**: Tiers 0, 1, 3 landed. Release-mode 86 MB
 > parse: 0.96 s → 0.70 s (String path), 0.91 s → 0.67 s (`[UInt8]`
 > path). Profile after the change confirms `skipWhitespace`,

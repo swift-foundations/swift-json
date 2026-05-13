@@ -2,13 +2,23 @@
 
 <!--
 ---
-version: 1.0.1
+version: 1.0.2
 last_updated: 2026-05-13
-status: RECOMMENDATION
+status: DECISION
 tier: 2
 ---
 -->
 
+> **v1.0.2 (2026-05-13)**: Phase A1 LANDED. **Parity with Foundation
+> achieved on the bytes path; 1.06× on the String path — both well
+> below the 1.3× target.** Three-iteration averages on the 86 MB Swift
+> stdlib symbol graph (release, macOS 26 arm64): swift-json
+> `JSON.parse([UInt8])` 0.304 s vs Foundation.JSONSerialization
+> 0.299 s (**1.02×**); swift-json `JSON.parse(String)` 0.316 s
+> (**1.06×**). A1 outcomes recorded in §9 below. **A2 measurement
+> gate PASSED — Phase B is NOT triggered**. Status upgraded
+> RECOMMENDATION → DECISION.
+>
 > **v1.0.1 (2026-05-13)**: Phase A0 GREEN — all three premises confirmed.
 > Evidence in `Experiments/parse-performance-tier-4-feasibility/`.
 > `~Escapable` on associated types confirmed by the principal under
@@ -791,6 +801,131 @@ A1 is unblocked. The dispatch fork in `RFC_8259.Decode` can rely on
 `withContiguousStorageIfAvailable` engaging on the inputs callers
 actually pass — that fact removes one of the open assumptions in
 the projection of ≤0.39 s on the 86 MB workload.
+
+## 9. A1 measured outcomes (v1.0.2)
+
+Implementation landed across `swift-ietf/swift-rfc-8259` in four files:
+
+| Path | Status | Lines |
+|------|--------|------:|
+| `Sources/RFC 8259/RFC_8259.Lexer.Span.swift` | NEW (cursor + namespace enum) | 189 |
+| `Sources/RFC 8259/RFC_8259.Lexer.Span.Position.swift` | NEW (lazy position with cache-on-first-access) | 79 |
+| `Sources/RFC 8259/RFC_8259.Parser.Span.swift` | NEW (parser + lex methods, non-token-buffering) | 609 |
+| `Sources/RFC 8259/RFC_8259.Decode.swift` | MODIFIED (dispatch fork — three entry points: `Collection<UInt8>`, `String`, `Substring`) | +124, −6 |
+| `Tests/RFC 8259 Tests/Lexer.Span Tests.swift` | NEW (53 tests covering structural tokens, literals, numbers, strings, escapes, surrogate pairs, depth, errors, position, lazy-cache, dispatch fork, public-API parity) | 462 |
+
+### Naming refinement vs §4.1
+
+The architecture doc nested the new types under the generic
+`RFC_8259.Lexer.Span` per §4.1 (line 388). Swift requires the
+parent generic's argument at every nested-type reference, which
+makes the doc's spelling non-trivial to spell from sibling files
+that don't already have an `RFC_8259.Lexer<SomeInput>` in scope.
+Implementation lives at `RFC_8259.Span.Lexer` / `RFC_8259.Span.Parser`
+— same variant-label intent, expressed through a non-generic
+`RFC_8259.Span` namespace enum. File names preserve the doc's
+wording for recognisability. Functional behaviour unchanged.
+
+### Storage-shape note: byte-level empty-collection detection
+
+The generic `RFC_8259.Parser<Input>` carries `var lookahead: Token?`
+to implement a 1-token pushback pattern for the empty-`{}` / empty-`[]`
+detection. Storing `Optional<RFC_8259.Token>` inside a
+`~Copyable & ~Escapable` struct triggered a Swift compiler
+internal-bug ("copy of noncopyable typed value") on the current
+toolchain (Swift 6.3+ as of 2026-05-13). The Span parser sidesteps
+this by doing the empty-collection check at the byte level (`peek`
+for `]` / `}`) rather than at the token level, which preserves the
+RFC 8259 semantics without storing a buffered token. The deviation
+is local to `RFC_8259.Span.Parser.parseObject` / `parseArray`; the
+existing generic parser is unaffected.
+
+### Refinements beyond the doc spec
+
+Three optimisations beyond §4 were applied during implementation
+after the post-Tier-1 profile guided them:
+
+1. **Cache-on-first-access lazy position with offset comparison**
+   (per the principal's pushback during architecture review). The
+   cache stores `(cachedPosition: RFC_8259.Position?, cachedPositionOffset: Int)`;
+   `materializedPosition()` compares the cached offset against the
+   current cursor position and recomputes on mismatch. The `advance()`
+   hot path does NOT write to the cache — keeping the per-byte
+   store count minimal. The `positionAt(byteOffset:)` helper
+   handles the case where the parser captured a start-of-token
+   offset before a multi-byte scan.
+
+2. **Inlined whitespace check**, replacing the `RFC_8259.isWhitespace`
+   Set lookup. The post-Tier-1 sample profile attributed measurable
+   cost to `Hasher._hash(seed:bytes:count:)` under `skipWhitespace`
+   — the Set-backed predicate hashes every byte. The Span path uses
+   `byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D`
+   directly per RFC 8259 §2.
+
+3. **lexStringValue and lexNumberValue return their value type
+   directly** (`String` / `RFC_8259.Number`) rather than wrapping
+   in `RFC_8259.Token`. The Token wrapping the generic lexer
+   produces is unused by `RFC_8259.Span.Parser`'s flow — bypassing
+   it saves one enum payload per JSON string / number.
+
+### Measured outcomes
+
+Same harness as the predecessor doc (`/tmp/json-parse-bench`,
+`Package.swift` depending on swift-json by path, single iteration,
+release build, macOS 26 / arm64, 86 MB `Swift.symbols.json`):
+
+```
+                                              Tier 1/3    A1 (Tier 4)       Δ
+[FLOOR]   byte-iterate Data                    0.245 s     0.245 s          —
+[FLOOR]   byte-iterate [UInt8]                 0.006 s     0.009 s          —
+Foundation.JSONSerialization.jsonObject(with:) 0.297 s     0.294 s          —
+swift-json JSON.parse(String)                  0.703 s     0.335 s        −52 %
+swift-json JSON.parse([UInt8])                 0.672 s     0.314 s        −53 %
+```
+
+Three-iteration averages (for stability):
+
+| Path | Time | × Foundation |
+|------|-----:|-------------:|
+| Foundation.JSONSerialization | 0.299 s | 1.00× |
+| swift-json `JSON.parse([UInt8])` | **0.304 s** | **1.02×** |
+| swift-json `JSON.parse(String)` | **0.316 s** | **1.06×** |
+
+### Hotspot collapse — post-A1 sample profile (10 × parse)
+
+The four cursor-side wedges identified in §2 are now collapsed.
+The post-A1 profile breakdown:
+
+| Cost center | Share | Notes |
+|------------|------:|-------|
+| Inside `RFC_8259.Span.Parser.parse` | ~85 % | Healthy: actual parse work, not protocol-witness dispatch |
+| `outlined destroy of RFC_8259.Value` recursive teardown | ~15 % | Amdahl shift confirmed — relative share grew from ~7 % (Tier 1) because the cursor side got proportionally faster |
+
+The Amdahl shift the architecture doc §7 flagged ("Tree teardown
+might *expand* to the dominant wedge after A1, leaving 1.3× still
+out of reach") landed in the safe zone — teardown is now the
+single largest residual wedge but does not block the 1.3× target
+on this workload.
+
+### A2 disposition
+
+**A2 measurement gate PASSED.** Both paths are below 1.3× Foundation
+on the canonical workload (1.02× and 1.06×). Phase B (arena-allocated
+`~Copyable` tree) is **NOT triggered**. The tree-teardown wedge
+remains a known residual; if a future hot consumer demonstrates that
+its workload is dominated by per-Value lifecycle (e.g., parse-then-
+discard at sub-100µs scale), Phase B re-opens as a separate research
+arc per §5's conditional clause.
+
+### Out of scope (held)
+
+- Tier 2 (`ASCII.Decimal.Parser` adoption for the integer branch in
+  `lexNumberValue`) — still orthogonal to Tier 4 and still HELD;
+  bounded gain, permanent dep edge, no current pressure.
+- Tier 5 (`Input.Borrowed` substrate in `swift-input-primitives`) —
+  still HELD; Tier 4 routes around it. If `Input.Borrowed` ever
+  lands, the internal `RFC_8259.Span.Lexer` can be re-homed to the
+  ecosystem at that point ([RES-018] second-consumer hurdle).
 
 ## Provenance
 
