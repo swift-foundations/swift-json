@@ -1,21 +1,27 @@
 {
   "$schema": "https://swift-institute.org/schemas/research-index-v1.json",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-04-18",
+  "generatedAt": "2026-05-13",
   "title": "Research Index — swift-json",
   "blurb": "",
   "scope": "swift-json (swift-foundations)",
   "documents": [
     {
-      "file": "audit.md",
-      "displayName": "audit.md",
-      "topic": "Modularization audit: MOD-010 stdlib extensions, MOD-011 test support",
-      "date": "2026-03-20",
-      "status": "OPEN",
+      "file": "parse-performance.md",
+      "displayName": "Parse Performance",
+      "topic": "RFC_8259 text-parser hotspots at stdlib-scale inputs; debug vs release framing, allocation reduction, Span-cursor path; v1.1.0 records measured −27% wall-clock after Tiers 0/1/3 landing",
+      "date": "2026-05-13",
+      "status": "RECOMMENDATION",
       "statusDetail": null,
-      "statusRaw": "OPEN",
-      "tier": null,
+      "statusRaw": "RECOMMENDATION",
+      "tier": 1,
       "scope": null
+    }
+  ],
+  "narrativeSections": [
+    {
+      "heading": "See also",
+      "body": "Modularization audit findings (MOD-010 stdlib extensions, MOD-011 test support) live in `swift-foundations/swift-json/Audits/audit.md` rather than `Research/`; the audit was incorrectly indexed here from 2026-03-20 to 2026-05-13 and has been moved to its correct home."
     }
   ]
 }
