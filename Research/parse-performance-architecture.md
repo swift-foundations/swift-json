@@ -2,12 +2,23 @@
 
 <!--
 ---
-version: 1.0.0
+version: 1.0.1
 last_updated: 2026-05-13
 status: RECOMMENDATION
 tier: 2
 ---
 -->
+
+> **v1.0.1 (2026-05-13)**: Phase A0 GREEN — all three premises confirmed.
+> Evidence in `Experiments/parse-performance-tier-4-feasibility/`.
+> `~Escapable` on associated types confirmed by the principal under
+> `.enableExperimentalFeature("SuppressedAssociatedTypes")`.
+> `String.UTF8View.withContiguousStorageIfAvailable` engaged on all 7
+> probed shapes including bridged NSString (more favourable than this
+> doc's prior §4.3 line 487-489 projection). `Span<UInt8>` + `throws(E)`
+> + `@_lifetime(borrow bytes)` composition compiles and runs cleanly;
+> typed errors propagate across `inout Cursor` boundaries. Phase A1 is
+> unblocked. See §8 "A0 disposition" appended below.
 
 ## Context
 
@@ -742,6 +753,44 @@ recommended workload, not certainty; the principal should accept a
 - [RES-003], [RES-010b], [RES-018], [RES-019], [RES-021], [RES-028] — Research process: option-comparison shape, second-consumer hurdle, prior-art survey, smallest-isolation-first.
 - [ARCH-LAYER-001], [ARCH-LAYER-007], [ARCH-LAYER-008], [ARCH-LAYER-011] — Layering, Foundation-freedom across all five layers, correctness-driven shaping pre-1.0, improve-institute over reaching for Foundation.
 - [HANDOFF-013], [HANDOFF-016] — Prior-research grep; premise-staleness audit.
+
+## 8. A0 disposition (v1.0.1)
+
+Phase A0 ran on macOS 26 / arm64 with the active Swift 6.3+ toolchain.
+Spike artifact:
+`swift-foundations/swift-json/Experiments/parse-performance-tier-4-feasibility/`
+(two executable targets, build clean under `swift build -c release`,
+all probes pass at run time).
+
+| Premise | Status | Source |
+|---------|--------|--------|
+| `~Escapable` on protocol associated types under `.enableExperimentalFeature("SuppressedAssociatedTypes")` | **GREEN** | Principal confirmation 2026-05-13; original CONFIRMED 2026-02-13 in `swift-parser-primitives/Experiments/suppressed-escapable-associated-types/main.swift` |
+| `String.UTF8View.withContiguousStorageIfAvailable` returns non-nil for native + bridged Strings | **GREEN** (more favourable than projected) | `Experiments/parse-performance-tier-4-feasibility/Sources/check-contiguous-storage/main.swift` — 7 probes, all FIRED |
+| `Span<UInt8>` + `throws(E)` + `@_lifetime(borrow bytes)` composes; typed errors survive lifetime + inout chain | **GREEN** | `Experiments/parse-performance-tier-4-feasibility/Sources/check-span-typed-throws/main.swift` — 5 probes, all PASS |
+
+### Notable: bridged NSString hits the fast path
+
+The architecture doc's §4.3 line 487-489 projected: *"bridged NSString
+(Foundation interop) is the exception, and there the slow path
+engages."* The A0 probe shows otherwise on the macOS 26 arm64 target —
+both a small (21-char) and a longer (100-char) `NSString`-as-`String`
+hit `withContiguousStorageIfAvailable`. Modern macOS Foundation
+appears to eagerly UTF-8-ify bridged strings.
+
+Implication for A1: the Span fast path engages on essentially every
+input shape a caller would naturally pass on Apple platforms. The
+`Swift.Array(string.utf8)` slow-path materialisation that the doc's
+§4.3 retained as a fallback may rarely fire in practice. The slow
+path is still required for correctness (non-contiguous lazy
+collections do exist), but the wall-clock-relevant share is smaller
+than projected.
+
+### Decision
+
+A1 is unblocked. The dispatch fork in `RFC_8259.Decode` can rely on
+`withContiguousStorageIfAvailable` engaging on the inputs callers
+actually pass — that fact removes one of the open assumptions in
+the projection of ≤0.39 s on the 86 MB workload.
 
 ## Provenance
 

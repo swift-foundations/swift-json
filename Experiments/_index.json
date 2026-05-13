@@ -7,6 +7,21 @@
   "scope": "swift-foundations/swift-json",
   "experiments": [
     {
+      "directory": "parse-performance-tier-4-feasibility",
+      "category": "compiler-binding-verification",
+      "purpose": "Phase A0 feasibility spike for `swift-foundations/swift-json/Research/parse-performance-architecture.md` v1.0.0 (Tier 4 Span-cursor design). Two independent compiler-binding checks: (1) `check-contiguous-storage` verifies `String.UTF8View.withContiguousStorageIfAvailable` engagement across String shapes; (2) `check-span-typed-throws` verifies `Span<UInt8>` + `throws(E)` + `@_lifetime(borrow bytes)` composition for the proposed `RFC_8259.Lexer.Span` cursor shape.",
+      "date": "2026-05-13",
+      "toolchain": "Apple Swift 6.3+",
+      "status": "CONFIRMED",
+      "statusDetail": "All three Phase A0 premises GREEN. (1) `~Escapable` on associated types: user-confirmed via `.enableExperimentalFeature(\"SuppressedAssociatedTypes\")` (originally CONFIRMED 2026-02-13 in `swift-parser-primitives/Experiments/suppressed-escapable-associated-types/`). (2) `String.UTF8View.withContiguousStorageIfAvailable` fired on all 7 probed shapes including bridged NSString (more favourable than the architecture doc's projection). (3) `Span<UInt8>` + typed throws + `@_lifetime(borrow bytes)` compiles and runs; typed errors propagate across `inout Cursor` boundaries; `~Escapable` enforcement holds. Phase A1 (Span lexer + parser implementation) is unblocked.",
+      "statusRaw": "CONFIRMED",
+      "crossRefs": [
+        "swift-foundations/swift-json/Research/parse-performance-architecture.md",
+        "swift-foundations/swift-json/Research/parse-performance.md",
+        "swift-primitives/swift-parser-primitives/Experiments/suppressed-escapable-associated-types/"
+      ]
+    },
+    {
       "directory": "symbol-graph-conformance-oracle",
       "category": "format-verification",
       "purpose": "Verify that `swift-symbolgraph-extract` emits sufficient `conformsTo` relationships in its JSON output to reconstruct a protocol-refinement table — replacing the hardcoded `idiomKnownStdlibRefinements` in `Lint.Rule.Idiom.RedundantRefinement` with a precomputed oracle. The empirical foundation for Shape F in `swift-foundations/swift-linter/Research/lsp-sourcekit-integration.md` v1.1.0.",
