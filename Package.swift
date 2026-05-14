@@ -17,6 +17,7 @@ let package = Package(
     dependencies: [
         .package(path: "../../swift-ietf/swift-rfc-8259"),
         .package(path: "../../swift-primitives/swift-parser-primitives"),
+        .package(path: "../../swift-primitives/swift-array-primitives"),
         .package(path: "../swift-async")
     ],
     targets: [
@@ -25,6 +26,7 @@ let package = Package(
             dependencies: [
                 .product(name: "RFC 8259", package: "swift-rfc-8259"),
                 .product(name: "Parser Error Primitives", package: "swift-parser-primitives"),
+                .product(name: "Array Primitives", package: "swift-array-primitives"),
                 .product(name: "Async", package: "swift-async")
             ]
         ),
