@@ -2,13 +2,42 @@
 
 <!--
 ---
-version: 1.2.0
-last_updated: 2026-05-13
+version: 1.2.1
+last_updated: 2026-05-14
 status: DECISION
 tier: 1
 ---
 -->
 
+> **v1.2.1 (2026-05-14)**: Honest-framing amendment after a
+> first-reader challenge to the v1.2.0 Foundation-comparison framing.
+> The "14× faster than Foundation on lookup" claim was specific to
+> the dynamic-access path (`JSONSerialization` → `as? [String: Any]`
+> casts vs swift-json's typed dynamic-member-lookup). A new
+> `codable-lookup` mode in `Experiments/parse-performance-bench`
+> measured the schema-known path (Foundation's `JSONDecoder` + Codable
+> vs swift-json's `JSON.Serializable` extension). On the same 86 MB
+> workload, with a `Symbol` struct declaring `kind.identifier +
+> identifier.precise + pathComponents`:
+>
+> | Use case | Foundation | swift-json | Outcome |
+> |----------|-----------|------------|---------|
+> | Dynamic / schema-less (the v1.2.0 measurement) | `JSONSerialization` 0.30 s parse + 46 ms/iter lookup | `JSON.parse` 0.30 s + 3.16 ms/iter | swift-json **14× faster on lookup** |
+> | Schema-known (Codable) | `JSONDecoder().decode(T.self, …)` **0.220 s** parse+decode + 1.6 ms/iter | `T(jsonBytes: …)` **0.349 s** + 1.72 ms/iter | Foundation **37% faster on parse+decode**; ≈ equal on lookup |
+>
+> Root cause of the Codable gap: `JSONDecoder` parses selectively
+> (only fields the `Decodable` declares). swift-json's
+> `JSON.Serializable.init(jsonBytes:)` parses the **full** JSON tree
+> via `JSON.parse(...)` first, then extracts the declared fields —
+> strictly more work for partial-shape decodes.
+>
+> Honest blanket framing: **swift-json wins on dynamic-access
+> workloads; Foundation wins on schema-known partial-shape decodes;
+> they're equivalent on native-struct lookup once data is decoded**.
+> No code change; no roll-back. The v1.2.0 DECISION stands for the
+> parse-side parity work; the Codable gap is a documented structural
+> property of the current architecture, not a regression.
+>
 > **v1.2.0 (2026-05-13)**: **Tier 4 LANDED. Foundation parity
 > achieved.** Release-mode 86 MB parse: 0.67 s → 0.304 s on the
 > `[UInt8]` path (1.02× Foundation) and 0.316 s on the `String` path

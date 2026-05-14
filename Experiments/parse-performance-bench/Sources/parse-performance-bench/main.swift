@@ -13,6 +13,75 @@ import JSON
 import Dictionary_Ordered_Primitives
 import Hash_Primitives
 
+// MARK: - Schema for codable-lookup mode
+//
+// Minimal Symbol Graph schema covering the fields the canonical
+// workload's traversal pattern actually touches:
+//   symbols[].kind.identifier   — String
+//   symbols[].identifier.precise — String
+//   symbols[].pathComponents     — [String]
+//
+// Defined at file scope so both Foundation Decodable and swift-json
+// JSON.Serializable can extend it.
+
+struct SymbolKind: Decodable, JSON.Serializable {
+    let identifier: String
+
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> SymbolKind {
+        return SymbolKind(identifier: String(json.identifier))
+    }
+
+    static func serialize(_ value: SymbolKind) -> JSON {
+        ["identifier": .string(value.identifier)]
+    }
+}
+
+struct SymbolIdentifier: Decodable, JSON.Serializable {
+    let precise: String
+
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> SymbolIdentifier {
+        return SymbolIdentifier(precise: String(json.precise))
+    }
+
+    static func serialize(_ value: SymbolIdentifier) -> JSON {
+        ["precise": .string(value.precise)]
+    }
+}
+
+struct Symbol: Decodable, JSON.Serializable {
+    let kind: SymbolKind
+    let identifier: SymbolIdentifier
+    let pathComponents: [String]
+
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> Symbol {
+        let kind = try SymbolKind(json: json.kind)
+        let identifier = try SymbolIdentifier(json: json.identifier)
+        let pathComponents = try [String](json: json.pathComponents)
+        return Symbol(kind: kind, identifier: identifier, pathComponents: pathComponents)
+    }
+
+    static func serialize(_ value: Symbol) -> JSON {
+        [
+            "kind": SymbolKind.serialize(value.kind),
+            "identifier": SymbolIdentifier.serialize(value.identifier),
+            "pathComponents": .array(value.pathComponents.map { .string($0) })
+        ]
+    }
+}
+
+struct SymbolGraph: Decodable, JSON.Serializable {
+    let symbols: [Symbol]
+
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> SymbolGraph {
+        let symbols = try [Symbol](json: json.symbols)
+        return SymbolGraph(symbols: symbols)
+    }
+
+    static func serialize(_ value: SymbolGraph) -> JSON {
+        ["symbols": .array(value.symbols.map { Symbol.serialize($0) })]
+    }
+}
+
 func mono() -> Double {
     var ts = timespec()
     clock_gettime(CLOCK_MONOTONIC, &ts)
@@ -350,6 +419,87 @@ if mode == "lookup" {
     print("")
     print("Equivalent reads per iteration: 3 × \(symbolCount) = \(3 * symbolCount)")
     print("Total reads over \(iters) iters: \(3 * symbolCount * iters)")
+}
+
+// CODABLE-LOOKUP mode: schema-known typed-decode comparison.
+//
+// The standard `lookup` mode compares JSONSerialization (untyped Any
+// + per-hop casts) against swift-json's typed dynamic-member-lookup.
+// This mode runs the schema-known counterpart: Foundation's
+// JSONDecoder + Codable struct vs swift-json's JSON.Serializable
+// extension. Both produce a native Swift struct after parse+decode;
+// post-decode lookup is native struct member access on both sides
+// (no casts, no dynamic dispatch).
+//
+// Three measurements per parser:
+//   1. Full parse + decode (single shot from bytes/string to struct)
+//   2. Lookup pass over the decoded struct (native access)
+//   3. Combined wall-clock for parse-once-then-lookup-N-times
+//
+// Expected: lookup is ≈ equal because both sides do native struct
+// access. Parse+decode may differ — Foundation's JSONDecoder is
+// selective (parses only fields the Decodable declares); swift-json
+// parses the full tree first via JSON.parse(...) then extracts.
+if mode == "codable-lookup" {
+    print("=== CODABLE-LOOKUP: schema-known typed-decode comparison ===")
+    print("Symbol schema: kind.identifier + identifier.precise + pathComponents")
+    print("Foundation:  JSONDecoder().decode(SymbolGraph.self, from: data)")
+    print("swift-json:  SymbolGraph(jsonBytes: bytesForm)")
+    print("")
+
+    // Time parse+decode for each parser (single iteration).
+    let p0 = mono()
+    let fnGraph = try JSONDecoder().decode(SymbolGraph.self, from: data)
+    let p1 = mono()
+    let sjGraph = try SymbolGraph(jsonBytes: bytesForm)
+    let p2 = mono()
+    report("(once)  Foundation parse+decode", p1 - p0)
+    report("(once)  swift-json parse+decode", p2 - p1)
+    print("")
+
+    // Validate equivalent results
+    let fnCount = fnGraph.symbols.count
+    let sjCount = sjGraph.symbols.count
+    guard fnCount == sjCount else {
+        print("symbol counts diverge: fn=\(fnCount) sj=\(sjCount)")
+        exit(1)
+    }
+    print("symbol count: \(fnCount) (match: \(fnCount == sjCount))")
+    print("")
+
+    // Foundation lookup pass — native struct access
+    do {
+        let t0 = mono()
+        var sink: Int = 0
+        for _ in 0..<iters {
+            for sym in fnGraph.symbols {
+                sink &+= sym.kind.identifier.count
+                sink &+= sym.identifier.precise.count
+                sink &+= sym.pathComponents.count
+            }
+        }
+        if sink == 0 { print("(DCE FN)") }
+        report("Foundation lookup pass (×\(iters))", mono() - t0)
+    }
+
+    // swift-json lookup pass — native struct access (same shape)
+    do {
+        let t0 = mono()
+        var sink: Int = 0
+        for _ in 0..<iters {
+            for sym in sjGraph.symbols {
+                sink &+= sym.kind.identifier.count
+                sink &+= sym.identifier.precise.count
+                sink &+= sym.pathComponents.count
+            }
+        }
+        if sink == 0 { print("(DCE SJ)") }
+        report("swift-json lookup pass (×\(iters))", mono() - t0)
+    }
+
+    print("")
+    print("Equivalent reads per iteration: 3 × \(fnCount) = \(3 * fnCount)")
+    print("Total reads over \(iters) iters: \(3 * fnCount * iters)")
 }
 
 // SANITY mode: verify both parsers actually built the tree by extracting
