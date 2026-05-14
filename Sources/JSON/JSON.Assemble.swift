@@ -37,7 +37,7 @@ extension JSON.Assemble {
     @inlinable
     internal static func from(_ events: inout JSON.Span.EventStream) throws(JSON.Error) -> JSON {
         do throws(RFC_8259.Error) {
-            let value = try RFC_8259.Span.Assemble.from(&events.inner)
+            let value = try Lexer.Pull.Assemble.from(&events.inner, strategy: RFC_8259.Pull.Assemble.self)
             return JSON(value)
         } catch {
             throw JSON.Error(error)
