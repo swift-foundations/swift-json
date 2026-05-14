@@ -34,6 +34,30 @@ struct SymbolKind: Decodable, JSON.Serializable {
     static func serialize(_ value: SymbolKind) -> JSON {
         ["identifier": .string(value.identifier)]
     }
+
+    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> SymbolKind {
+        try events.expectObjectStart()
+        var identifier: String? = nil
+        while let token = try events.next() {
+            if token == .objectEnd { break }
+            if token == .comma { continue }
+            guard token == .string else {
+                throw .invalidSyntax(message: "expected object key", location: events.position().location)
+            }
+            let key = try events.currentString()
+            try events.expectColon()
+            switch key {
+            case "identifier":
+                identifier = try String.deserialize(events: &events)
+            default:
+                try events.skipValue()
+            }
+        }
+        guard let identifier = identifier else {
+            throw .missingKey("identifier")
+        }
+        return SymbolKind(identifier: identifier)
+    }
 }
 
 struct SymbolIdentifier: Decodable, JSON.Serializable {
@@ -45,6 +69,30 @@ struct SymbolIdentifier: Decodable, JSON.Serializable {
 
     static func serialize(_ value: SymbolIdentifier) -> JSON {
         ["precise": .string(value.precise)]
+    }
+
+    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> SymbolIdentifier {
+        try events.expectObjectStart()
+        var precise: String? = nil
+        while let token = try events.next() {
+            if token == .objectEnd { break }
+            if token == .comma { continue }
+            guard token == .string else {
+                throw .invalidSyntax(message: "expected object key", location: events.position().location)
+            }
+            let key = try events.currentString()
+            try events.expectColon()
+            switch key {
+            case "precise":
+                precise = try String.deserialize(events: &events)
+            default:
+                try events.skipValue()
+            }
+        }
+        guard let precise = precise else {
+            throw .missingKey("precise")
+        }
+        return SymbolIdentifier(precise: precise)
     }
 }
 
@@ -67,6 +115,41 @@ struct Symbol: Decodable, JSON.Serializable {
             "pathComponents": .array(value.pathComponents.map { .string($0) })
         ]
     }
+
+    /// Opt-in event-grain deserialize. The wedge: only 3 of ~9 keys
+    /// per symbol are declared; the rest go through skipValue() which
+    /// walks bytes without materialising values. This is the §4.6
+    /// end-to-end example translated to the Symbol schema.
+    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> Symbol {
+        try events.expectObjectStart()
+        var kind: SymbolKind? = nil
+        var identifier: SymbolIdentifier? = nil
+        var pathComponents: [String]? = nil
+        while let token = try events.next() {
+            if token == .objectEnd { break }
+            if token == .comma { continue }
+            guard token == .string else {
+                throw .invalidSyntax(message: "expected object key", location: events.position().location)
+            }
+            let key = try events.currentString()
+            try events.expectColon()
+            switch key {
+            case "kind":
+                kind = try SymbolKind.deserialize(events: &events)
+            case "identifier":
+                identifier = try SymbolIdentifier.deserialize(events: &events)
+            case "pathComponents":
+                pathComponents = try [String].deserialize(events: &events)
+            default:
+                try events.skipValue() // ← the wedge
+            }
+        }
+        guard let kind = kind, let identifier = identifier,
+              let pathComponents = pathComponents else {
+            throw .missingKey("kind/identifier/pathComponents")
+        }
+        return Symbol(kind: kind, identifier: identifier, pathComponents: pathComponents)
+    }
 }
 
 struct SymbolGraph: Decodable, JSON.Serializable {
@@ -79,6 +162,30 @@ struct SymbolGraph: Decodable, JSON.Serializable {
 
     static func serialize(_ value: SymbolGraph) -> JSON {
         ["symbols": .array(value.symbols.map { Symbol.serialize($0) })]
+    }
+
+    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> SymbolGraph {
+        try events.expectObjectStart()
+        var symbols: [Symbol]? = nil
+        while let token = try events.next() {
+            if token == .objectEnd { break }
+            if token == .comma { continue }
+            guard token == .string else {
+                throw .invalidSyntax(message: "expected object key", location: events.position().location)
+            }
+            let key = try events.currentString()
+            try events.expectColon()
+            switch key {
+            case "symbols":
+                symbols = try [Symbol].deserialize(events: &events)
+            default:
+                try events.skipValue()
+            }
+        }
+        guard let symbols = symbols else {
+            throw .missingKey("symbols")
+        }
+        return SymbolGraph(symbols: symbols)
     }
 }
 
@@ -495,6 +602,162 @@ if mode == "codable-lookup" {
         }
         if sink == 0 { print("(DCE SJ)") }
         report("swift-json lookup pass (×\(iters))", mono() - t0)
+    }
+
+    print("")
+    print("Equivalent reads per iteration: 3 × \(fnCount) = \(3 * fnCount)")
+    print("Total reads over \(iters) iters: \(3 * fnCount * iters)")
+}
+
+// CODABLE-LOOKUP-EVENT-GRAIN mode (Phase A1 of streaming-deserialize).
+//
+// Three measurements:
+//   1. Foundation parse+decode (control)
+//   2. swift-json status-quo SymbolGraph(jsonBytes:) (control)
+//   3. swift-json event-grain SymbolGraph.from(eventDecodingJsonBytes:)
+//      with opt-in deserialize(events:) — the wedge
+//
+// Plus the §4.3 default-fallback non-regression axis: a non-opt-in
+// String.from(eventDecodingJsonBytes:) on a small JSON-encoded string
+// should match status-quo init(jsonBytes:) performance within noise.
+// Existing String, Int, Array, Dictionary conformers DO override
+// deserialize(events:); to exercise the default-fallback path we
+// build a small bespoke conformer DefaultFallbackProbe that
+// inherits the default.
+//
+// Expected (per streaming-json-deserialize-comparative-analysis.md
+// v1.0.1 §9.3 binding A2 gate):
+//   - axis (a): opt-in SymbolGraph closes most of the 37% gap to
+//     Foundation: target ≤1.10× Foundation parse+decode.
+//   - axis (b): non-opt-in default-fallback path within ±5% of the
+//     existing codable-lookup mode's swift-json baseline.
+struct DefaultFallbackProbe: JSON.Serializable {
+    let name: String
+    let age: Int
+
+    static func serialize(_ value: DefaultFallbackProbe) -> JSON {
+        ["name": .string(value.name), "age": .number(value.age)]
+    }
+
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> DefaultFallbackProbe {
+        let name = String(json.name)
+        guard !name.isEmpty else { throw .missingKey("name") }
+        guard let age = Int(json.age) else { throw .missingKey("age") }
+        return DefaultFallbackProbe(name: name, age: age)
+    }
+    // Deliberately does NOT override deserialize(events:) — exercises
+    // the §4.3 default-fallback path with the short-circuit.
+}
+
+if mode == "codable-lookup-event-grain" {
+    print("=== CODABLE-LOOKUP-EVENT-GRAIN: opt-in fast path ===")
+    print("Symbol schema: kind.identifier + identifier.precise + pathComponents")
+    print("Foundation:  JSONDecoder().decode(SymbolGraph.self, from: data)")
+    print("swift-json status-quo:  SymbolGraph(jsonBytes: bytesForm)")
+    print("swift-json event-grain: SymbolGraph.from(eventDecodingJsonBytes: bytesForm)")
+    print("")
+
+    // Time parse+decode for each path (single iteration).
+    let p0 = mono()
+    let fnGraph = try JSONDecoder().decode(SymbolGraph.self, from: data)
+    let p1 = mono()
+    let sjStatusQuoGraph = try SymbolGraph(jsonBytes: bytesForm)
+    let p2 = mono()
+    let sjEventGrainGraph = try SymbolGraph.from(eventDecodingJsonBytes: bytesForm)
+    let p3 = mono()
+    let foundationTime = p1 - p0
+    let statusQuoTime = p2 - p1
+    let eventGrainTime = p3 - p2
+    report("(once)  Foundation parse+decode", foundationTime)
+    report("(once)  swift-json status-quo parse+decode", statusQuoTime)
+    report("(once)  swift-json EVENT-GRAIN parse+decode", eventGrainTime)
+    print("")
+    print("Ratios:")
+    print("  status-quo / Foundation:  \(String(format: "%.3f", statusQuoTime / foundationTime))x")
+    print("  event-grain / Foundation: \(String(format: "%.3f", eventGrainTime / foundationTime))x   [A2 axis (a)]")
+    print("  event-grain / status-quo: \(String(format: "%.3f", eventGrainTime / statusQuoTime))x   (wedge close)")
+    print("")
+
+    // Validate equivalent results
+    let fnCount = fnGraph.symbols.count
+    let sjStatusQuoCount = sjStatusQuoGraph.symbols.count
+    let sjEventGrainCount = sjEventGrainGraph.symbols.count
+    guard fnCount == sjStatusQuoCount, sjStatusQuoCount == sjEventGrainCount else {
+        print("symbol counts diverge: fn=\(fnCount) sj-sq=\(sjStatusQuoCount) sj-eg=\(sjEventGrainCount)")
+        exit(1)
+    }
+    print("symbol count: \(fnCount) (all three paths match)")
+    print("")
+
+    // Lookup pass parity check across all three.
+    do {
+        let t0 = mono()
+        var sink: Int = 0
+        for _ in 0..<iters {
+            for sym in fnGraph.symbols {
+                sink &+= sym.kind.identifier.count
+                sink &+= sym.identifier.precise.count
+                sink &+= sym.pathComponents.count
+            }
+        }
+        if sink == 0 { print("(DCE FN)") }
+        report("Foundation lookup pass (×\(iters))", mono() - t0)
+    }
+    do {
+        let t0 = mono()
+        var sink: Int = 0
+        for _ in 0..<iters {
+            for sym in sjStatusQuoGraph.symbols {
+                sink &+= sym.kind.identifier.count
+                sink &+= sym.identifier.precise.count
+                sink &+= sym.pathComponents.count
+            }
+        }
+        if sink == 0 { print("(DCE SJ-SQ)") }
+        report("swift-json status-quo lookup pass (×\(iters))", mono() - t0)
+    }
+    do {
+        let t0 = mono()
+        var sink: Int = 0
+        for _ in 0..<iters {
+            for sym in sjEventGrainGraph.symbols {
+                sink &+= sym.kind.identifier.count
+                sink &+= sym.identifier.precise.count
+                sink &+= sym.pathComponents.count
+            }
+        }
+        if sink == 0 { print("(DCE SJ-EG)") }
+        report("swift-json event-grain lookup pass (×\(iters))", mono() - t0)
+    }
+
+    print("")
+    print("=== A2 axis (b): default-fallback non-regression probe ===")
+    print("Tiny JSON {\"name\":\"x\",\"age\":1}; 100 000 iters; both paths.")
+    let probeJSON = #"{"name":"Alice","age":30}"#
+    let probeBytes: [UInt8] = Swift.Array(probeJSON.utf8)
+    let probeIters = 100_000
+
+    do {
+        let t0 = mono()
+        var sink: Int = 0
+        for _ in 0..<probeIters {
+            let v = try DefaultFallbackProbe(jsonBytes: probeBytes)
+            sink &+= v.age
+        }
+        if sink == 0 { print("(DCE probe-SQ)") }
+        let dt = mono() - t0
+        report("DefaultFallbackProbe status-quo (×\(probeIters))", dt)
+    }
+    do {
+        let t0 = mono()
+        var sink: Int = 0
+        for _ in 0..<probeIters {
+            let v = try DefaultFallbackProbe.from(eventDecodingJsonBytes: probeBytes)
+            sink &+= v.age
+        }
+        if sink == 0 { print("(DCE probe-EG)") }
+        let dt = mono() - t0
+        report("DefaultFallbackProbe default-fallback (×\(probeIters))", dt)
     }
 
     print("")
