@@ -49,6 +49,55 @@ extension JSON {
         /// - Returns: The deserialized value.
         /// - Throws: `JSON.Error` if deserialization fails.
         static func deserialize(_ json: JSON) throws(JSON.Error) -> Self
+
+        /// Deserializes from a pull-driven event stream — the opt-in
+        /// fast path that skips full-tree materialisation.
+        ///
+        /// Default implementation in the protocol extension delegates
+        /// to `JSON.Assemble.from(_:)` → `deserialize(_: JSON)`. The
+        /// default's fast path short-circuits to the existing tree
+        /// builder when the stream is unforked at position 0 (per the
+        /// streaming-deserialize arc's binding A1 constraint
+        /// §9.3 mitigation 1), so existing conformers do NOT regress.
+        ///
+        /// Opt-in consumers override this with a byte-to-target body
+        /// that uses `events.next()` / `currentString()` /
+        /// `currentNumber()` / `skipValue()` directly. Skipping
+        /// undeclared fields via `skipValue()` is the structural fix
+        /// to the 37% partial-shape decode gap to Foundation
+        /// `JSONDecoder` (per
+        /// `streaming-json-deserialize-status-quo-and-prior-art.md`
+        /// v1.0.0).
+        ///
+        /// - Parameter events: An `inout` event stream. The conformer
+        ///   consumes events until it has produced one complete value.
+        /// - Returns: The deserialized value.
+        /// - Throws: `JSON.Error` if deserialization fails.
+        static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> Self
+    }
+}
+
+// MARK: - Default Event-Stream Deserialize
+
+extension JSON.Serializable {
+    /// Default fallback: assemble a `JSON` value from the event stream,
+    /// then delegate to the existing tree-grain `deserialize(_:)`.
+    ///
+    /// Existing conformers inherit this for free; no source break.
+    /// Per A0 §9.3 the helper's FAST PATH short-circuits to
+    /// `RFC_8259.Span.Parser.parse(_:)` when the stream is unforked
+    /// at position 0, so the default-fallback's call graph collapses
+    /// to today's `init(jsonBytes:)` path on every existing conformer.
+    ///
+    /// Opt-in consumers override this method directly with a
+    /// byte-to-target body. The contribution of Option B is the
+    /// shape of the override — see
+    /// `streaming-json-deserialize-comparative-analysis.md` v1.0.1
+    /// §4.6 for the end-to-end example.
+    @inlinable
+    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> Self {
+        let json = try JSON.Assemble.from(&events)
+        return try Self.deserialize(json)
     }
 }
 
@@ -91,6 +140,67 @@ extension JSON.Serializable {
         self = try Self.deserialize(json)
     }
 
+    /// Creates an instance from UTF-8 JSON bytes via the event-grain
+    /// fast path.
+    ///
+    /// Conformers that have overridden `deserialize(events:)` get the
+    /// fast path (byte-to-target without intermediate tree
+    /// materialisation); conformers that haven't get the default
+    /// (full-tree fallback, equivalent to the existing
+    /// `init(jsonBytes:)` via the §4.3 short-circuit per A0 §9.3).
+    ///
+    /// Dispatches on contiguous storage — mirrors the
+    /// `RFC_8259.Decode` pattern. Static method returning `Self`
+    /// rather than an `init` because protocol-extension `init` does
+    /// not dispatch through the witness table the way methods do;
+    /// the static method ensures correct dispatch into the
+    /// conformer's override.
+    ///
+    /// - Parameter bytes: The UTF-8 encoded JSON.
+    /// - Returns: The deserialized value.
+    /// - Throws: `JSON.Error` if parsing or deserialization fails.
+    @inlinable
+    public static func from<Bytes>(eventDecodingJsonBytes bytes: Bytes) throws(JSON.Error) -> Self
+    where Bytes: Swift.Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
+        // Fast path: contiguous storage → Span cursor.
+        var parserError: JSON.Error? = nil
+        let fastResult: Self? = bytes.withContiguousStorageIfAvailable {
+            (buffer: UnsafeBufferPointer<UInt8>) -> Self? in
+            let span = buffer.span
+            var stream = JSON.Span.EventStream(span)
+            do {
+                return try Self.deserialize(events: &stream)
+            } catch let error as JSON.Error {
+                parserError = error
+                return nil
+            } catch {
+                parserError = .unknown
+                return nil
+            }
+        } ?? nil
+        if let value = fastResult { return value }
+        if let err = parserError { throw err }
+        // Slow path: arbitrary Collection<UInt8>.
+        let array = Swift.Array(bytes)
+        var slowError: JSON.Error? = nil
+        let result: Self? = array.withUnsafeBufferPointer { buffer -> Self? in
+            let span = buffer.span
+            var stream = JSON.Span.EventStream(span)
+            do {
+                return try Self.deserialize(events: &stream)
+            } catch let error as JSON.Error {
+                slowError = error
+                return nil
+            } catch {
+                slowError = .unknown
+                return nil
+            }
+        }
+        if let value = result { return value }
+        if let err = slowError { throw err }
+        throw .unknown
+    }
+
     /// Serializes this value to a JSON string.
     ///
     /// - Parameters:
@@ -126,6 +236,14 @@ extension JSON: JSON.Serializable {
     public static func deserialize(_ json: JSON) throws(JSON.Error) -> JSON {
         json
     }
+
+    /// Event-grain deserialize for `JSON` itself. Assembles the
+    /// full tree from events (uses the §4.3 short-circuit when the
+    /// stream is unforked).
+    @inlinable
+    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> JSON {
+        try JSON.Assemble.from(&events)
+    }
 }
 
 // MARK: - Standard Type Conformances
@@ -143,6 +261,17 @@ extension String: JSON.Serializable {
         }
         return value
     }
+
+    @inlinable
+    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> String {
+        guard let token = try events.next() else {
+            throw .typeMismatch(expected: "string", got: "end of input")
+        }
+        guard token == .string else {
+            throw .typeMismatch(expected: "string", got: token.description)
+        }
+        return try events.currentString()
+    }
 }
 
 extension Bool: JSON.Serializable {
@@ -158,6 +287,19 @@ extension Bool: JSON.Serializable {
         }
         return value
     }
+
+    @inlinable
+    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> Bool {
+        guard let token = try events.next() else {
+            throw .typeMismatch(expected: "bool", got: "end of input")
+        }
+        switch token {
+        case .`true`:  return true
+        case .`false`: return false
+        default:
+            throw .typeMismatch(expected: "bool", got: token.description)
+        }
+    }
 }
 
 extension Int: JSON.Serializable {
@@ -170,6 +312,21 @@ extension Int: JSON.Serializable {
     public static func deserialize(_ json: JSON) throws(JSON.Error) -> Int {
         guard let value = Int(json) else {
             throw .typeMismatch(expected: "int", got: json.typeName)
+        }
+        return value
+    }
+
+    @inlinable
+    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> Int {
+        guard let token = try events.next() else {
+            throw .typeMismatch(expected: "int", got: "end of input")
+        }
+        guard token == .number else {
+            throw .typeMismatch(expected: "int", got: token.description)
+        }
+        let number = try events.currentNumber()
+        guard let int64 = number.int64, let value = Int(exactly: int64) else {
+            throw .typeMismatch(expected: "int", got: "number out of range")
         }
         return value
     }
@@ -190,6 +347,21 @@ extension Int64: JSON.Serializable {
         }
         return value
     }
+
+    @inlinable
+    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> Int64 {
+        guard let token = try events.next() else {
+            throw .typeMismatch(expected: "int64", got: "end of input")
+        }
+        guard token == .number else {
+            throw .typeMismatch(expected: "int64", got: token.description)
+        }
+        let number = try events.currentNumber()
+        guard let value = number.int64 else {
+            throw .typeMismatch(expected: "int64", got: "number out of range")
+        }
+        return value
+    }
 }
 
 extension Double: JSON.Serializable {
@@ -204,6 +376,18 @@ extension Double: JSON.Serializable {
             throw .typeMismatch(expected: "double", got: json.typeName)
         }
         return value
+    }
+
+    @inlinable
+    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> Double {
+        guard let token = try events.next() else {
+            throw .typeMismatch(expected: "double", got: "end of input")
+        }
+        guard token == .number else {
+            throw .typeMismatch(expected: "double", got: token.description)
+        }
+        let number = try events.currentNumber()
+        return number.double ?? Double(number.int64 ?? 0)
     }
 }
 
@@ -225,6 +409,35 @@ extension Swift.Array: JSON.Serializable where Element: JSON.Serializable {
         }
         return result
     }
+
+    @inlinable
+    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> [Element] {
+        try events.expectArrayStart()
+        var result: [Element] = []
+        // Empty-array detection: peek for ']' without consuming a
+        // token, so Element.deserialize(events:) can drive its own
+        // next() on a non-empty path.
+        if events.peekStructural() == UInt8(ascii: "]") {
+            _ = try events.next() // consume ']'
+            return result
+        }
+        // First element — Element drives its own next().
+        result.append(try Element.deserialize(events: &events))
+
+        while true {
+            guard let next = try events.next() else {
+                throw .invalidSyntax(message: "Unexpected end of input in array", location: events.position().location)
+            }
+            switch next {
+            case .arrayEnd:
+                return result
+            case .comma:
+                result.append(try Element.deserialize(events: &events))
+            default:
+                throw .invalidSyntax(message: "Expected ',' or ']', got \(next.description)", location: events.position().location)
+            }
+        }
+    }
 }
 
 extension Dictionary: JSON.Serializable where Key == String, Value: JSON.Serializable {
@@ -244,6 +457,48 @@ extension Dictionary: JSON.Serializable where Key == String, Value: JSON.Seriali
         }
         return result
     }
+
+    @inlinable
+    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> [String: Value] {
+        try events.expectObjectStart()
+        var result: [String: Value] = [:]
+        if events.peekStructural() == UInt8(ascii: "}") {
+            _ = try events.next() // consume '}'
+            return result
+        }
+        // First member: key (string) : value
+        guard let firstKeyToken = try events.next() else {
+            throw .invalidSyntax(message: "Unexpected end of input in object", location: events.position().location)
+        }
+        guard firstKeyToken == .string else {
+            throw .invalidSyntax(message: "Expected object key (string), got \(firstKeyToken.description)", location: events.position().location)
+        }
+        let firstKey = try events.currentString()
+        try events.expectColon()
+        result[firstKey] = try Value.deserialize(events: &events)
+
+        while true {
+            guard let next = try events.next() else {
+                throw .invalidSyntax(message: "Unexpected end of input in object", location: events.position().location)
+            }
+            switch next {
+            case .objectEnd:
+                return result
+            case .comma:
+                guard let keyToken = try events.next() else {
+                    throw .invalidSyntax(message: "Unexpected end of input after ','", location: events.position().location)
+                }
+                guard keyToken == .string else {
+                    throw .invalidSyntax(message: "Expected object key (string), got \(keyToken.description)", location: events.position().location)
+                }
+                let key = try events.currentString()
+                try events.expectColon()
+                result[key] = try Value.deserialize(events: &events)
+            default:
+                throw .invalidSyntax(message: "Expected ',' or '}', got \(next.description)", location: events.position().location)
+            }
+        }
+    }
 }
 
 extension Optional: JSON.Serializable where Wrapped: JSON.Serializable {
@@ -257,6 +512,23 @@ extension Optional: JSON.Serializable where Wrapped: JSON.Serializable {
     public static func deserialize(_ json: JSON) throws(JSON.Error) -> Wrapped? {
         if json.isNull { return nil }
         return try Wrapped(json: json)
+    }
+
+    @inlinable
+    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> Wrapped? {
+        // Peek at the structural byte to detect null without consuming.
+        // 'n' is the first byte of `null`; any other byte routes to
+        // Wrapped.deserialize(events:).
+        if events.peekStructural() == UInt8(ascii: "n") {
+            guard let token = try events.next() else {
+                throw .invalidSyntax(message: "Unexpected end of input", location: events.position().location)
+            }
+            guard token == .null else {
+                throw .typeMismatch(expected: "value or null", got: token.description)
+            }
+            return nil
+        }
+        return try Wrapped.deserialize(events: &events)
     }
 }
 

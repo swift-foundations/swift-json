@@ -126,6 +126,17 @@ extension JSON.Span.EventStream {
     public mutating func position() -> RFC_8259.Position {
         inner.position()
     }
+
+    /// Peeks at the next non-whitespace byte without consuming a token.
+    ///
+    /// Returns `nil` at end of input. Useful for detecting
+    /// empty-container cases (`[]` / `{}`) before delegating to a
+    /// child decoder.
+    @inlinable
+    @_lifetime(self: copy self)
+    public mutating func peekStructural() -> UInt8? {
+        inner.peekStructural()
+    }
 }
 
 // MARK: - Convenience expect helpers
