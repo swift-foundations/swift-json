@@ -38,18 +38,16 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
     @usableFromInline
     internal typealias Value = RFC_8259.Value
 
-    /// Wholesale fast-path — constructs a stream and walks events.
+    /// Wholesale fast-path — delegates to ``RFC_8259/Decode/Implementation/parse(_:maxDepth:)``.
     ///
-    /// Note: this is a temporary event-walking implementation. The
-    /// Decode-relocation commit replaces this body with a direct call
-    /// to the moved JSON wholesale parser.
+    /// Per A0 §9.3, this short-circuit is the BINDING constraint that
+    /// makes the §4.3 default-fallback non-regressing.
     @inlinable
     internal static func consume(
         bytes: Swift.Span<UInt8>,
         limit: Int
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
-        var stream = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(bytes, limit: limit)
-        return try build(events: &stream)
+        try RFC_8259.Decode.Implementation.parse(bytes, maxDepth: limit)
     }
 
     /// Slow-path — drives the event stream to rebuild the tree.

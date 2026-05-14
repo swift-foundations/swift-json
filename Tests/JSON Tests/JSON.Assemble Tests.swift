@@ -20,8 +20,9 @@
 import Testing
 @testable import JSON
 
+extension JSON.Assemble {
 @Suite("JSON Assemble Tests")
-struct JSONAssembleTests {
+struct Tests {
 
     @Test
     func `Assemble.from short-circuits at position 0 and returns parsed value`() throws {
@@ -85,4 +86,5 @@ struct JSONAssembleTests {
             #expect(direct == assembled)
         }
     }
+}
 }
