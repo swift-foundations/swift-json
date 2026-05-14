@@ -64,6 +64,23 @@ tier: 1
 > that relocate work from cold to hot paths MUST measure at the hot
 > path, not at the substrate. Skill-lifecycle amendment queued.
 >
+> **Update (same day, 2026-05-14)**: residual closed. The follow-up
+> investigation at `swift-institute/Audits/streaming-deserialize-
+> residual-investigation.md` identified the ~12 ms residual as a
+> switch-shape carryover in `skipWhitespace` — the two-arm + CRLF-
+> special-case structure was vestigial under Option B (no tracker
+> maintenance) and produced different optimized code than pre-T-1's
+> single-arm switch. The fix at swift-rfc-8259 `8a92f3a` replaces
+> the two-arm structure with a single-arm switch over all four
+> whitespace bytes. Final gate (median 8 runs): **0.080 s** — below
+> pre-T-1 baseline (0.082 s), event-grain is now **2.62× faster than
+> Foundation** and **4.11× faster than swift-json's status-quo path**
+> on the canonical workload. Lesson for the integration-shape skill
+> amendment: sample-frame tick attribution does not resolve fine-
+> grained code-shape costs (register allocation, branch prediction);
+> wall-clock at the integration entry point is the load-bearing
+> evidence.
+>
 > **v1.2.1 (2026-05-14)**: Honest-framing amendment after a
 > first-reader challenge to the v1.2.0 Foundation-comparison framing.
 > The "14× faster than Foundation on lookup" claim was specific to
