@@ -72,14 +72,20 @@ extension JSON.Coder: Coder_Primitives.Coder.`Protocol` {
     /// Decodes a JSON value from a contiguous byte span.
     ///
     /// The wholesale Span parser consumes the entire input
-    /// (trailing-content check per RFC 8259 §2). On success the
-    /// entire input has been consumed; `input` is left unchanged
-    /// since this format does not support partial decoding.
+    /// (trailing-content check per RFC 8259 §2). On success,
+    /// `input` is advanced to an empty span at the end (entire
+    /// input was consumed), honoring the
+    /// ``Coder_Primitives/Coder/Protocol`` inout-advance contract.
     @inlinable
     public func decode(
         _ input: inout Swift.Span<UInt8>
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
-        try JSON.Decode.Implementation.parse(input, maxDepth: maxDepth)
+        let value = try JSON.Decode.Implementation.parse(input, maxDepth: maxDepth)
+        // Advance input to an empty span at the end: the wholesale
+        // parser consumed the entire input on success (per RFC 8259
+        // §2 trailing-content check).
+        input = input.extracting(input.count..<input.count)
+        return value
     }
 
     /// Encodes a JSON value by appending to a UTF-8 byte buffer.
