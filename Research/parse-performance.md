@@ -2,13 +2,68 @@
 
 <!--
 ---
-version: 1.2.1
+version: 1.3.0
 last_updated: 2026-05-14
 status: DECISION
 tier: 1
 ---
 -->
 
+> **v1.3.0 (2026-05-14)**: Streaming-deserialize placement landing
+> (`swift-institute/Audits/streaming-deserialize-placement-audit.md`,
+> commit `e8a06b7`) brought T-1 (rebase `RFC_8259.Span` cursor onto
+> `Lexer.Scanner` — swift-rfc-8259 `b4ec277`) and T-2 (re-home
+> `JSON.Assemble` to `RFC_8259.Span.Assemble` — swift-rfc-8259
+> `90cba4c` + swift-json `0960da6`). The standing [BENCH-011] probe
+> at `codable-lookup-event-grain` mode flagged a +25% event-grain
+> regression on the same 86 MB workload: pre-T-1 0.082 s -> post-T-1
+> 0.101 s (median 8 runs, σ ≈ 1 ms).
+>
+> Profile investigation
+> (`swift-institute/Audits/streaming-deserialize-regression-profile.md`,
+> commit `de3e3c8`) refuted the cross-module inlining hypothesis and
+> identified `Text.Location.Tracker` integration as the dominant cost
+> centre at two fire points: ~3.8 M `tracker.newline(at:)` calls per
+> parse in `skipWhitespace` (4.2 %-newline workload), and ~90 K
+> `let startLocation = lexer.scanner.location` token-start captures.
+> The audit's [INFRA-003] zero-cost defence was structurally correct
+> at the substrate level (typed primitives compile to identical
+> assembly) but the migration relocated position work from the error
+> path (rare) to the hot path (per-byte / per-token) — an
+> integration-shape failure rather than a substrate failure.
+>
+> Remediation landed in two surgical changes:
+>
+> - **Option A** — defer `startLocation` capture to error-throw
+>   sites. Adds `Lexer.Scanner.location(at: Text.Position)` to
+>   swift-lexer-primitives (`3fbf66f`) for on-demand resolution; the
+>   Span parser captures only the cheap `Text.Position` cursor on
+>   the hot path and routes throws through a new `position(at:)`
+>   helper. Closes ~2 ms of the 19 ms wedge (~11 %).
+> - **Option B** — elide per-newline tracker updates in
+>   `skipWhitespace`. JSON tokens cannot contain raw 0x0A / 0x0D
+>   (RFC 8259 §7), so the parser can skip Tracker maintenance
+>   entirely and pay an O(N) source scan at error-throw sites via
+>   `Lexer.Scanner.location(at:)` (made scan-based to keep the L1
+>   surface non-compound per [API-NAME-002]). Lands together with
+>   A on swift-rfc-8259 (`94c1616`). Closes an additional ~5 ms
+>   (~26 % of the wedge), bringing the median to **0.094 s**.
+>
+> **Outcome**: ~37 % of the wedge closed; ~12 ms residual above
+> pre-T-1 baseline. Event-grain absolute position unchanged in
+> spirit — 2.37× Foundation, 3.78× swift-json status-quo on the
+> canonical workload. 216 swift-rfc-8259 tests pass; symbol-count
+> parity (14 552) preserved across all three paths.
+>
+> **Follow-up surfaced**: the residual ~12 ms is not predicted by
+> either fire point identified in the profile. Cause not yet
+> isolated. Open as a separate investigation when prioritised.
+>
+> **Institute-wide consequence**: [INFRA-003] zero-cost expectation
+> needs a substrate-vs-integration-shape distinction. Migration arcs
+> that relocate work from cold to hot paths MUST measure at the hot
+> path, not at the substrate. Skill-lifecycle amendment queued.
+>
 > **v1.2.1 (2026-05-14)**: Honest-framing amendment after a
 > first-reader challenge to the v1.2.0 Foundation-comparison framing.
 > The "14× faster than Foundation on lookup" claim was specific to
