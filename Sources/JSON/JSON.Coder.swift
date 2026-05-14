@@ -47,12 +47,12 @@ extension JSON {
         public let maxDepth: Int
 
         /// Encoding options (default compact, no slash escaping).
-        public let encodeOptions: RFC_8259.Encode.Options
+        public let encodeOptions: JSON.Encode.Options
 
         @inlinable
         public init(
             maxDepth: Int = 512,
-            encodeOptions: RFC_8259.Encode.Options = RFC_8259.Encode.Options()
+            encodeOptions: JSON.Encode.Options = JSON.Encode.Options()
         ) {
             self.maxDepth = maxDepth
             self.encodeOptions = encodeOptions
@@ -79,7 +79,7 @@ extension JSON.Coder: Coder_Primitives.Coder.`Protocol` {
     public func decode(
         _ input: inout Swift.Span<UInt8>
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
-        try RFC_8259.Decode.Implementation.parse(input, maxDepth: maxDepth)
+        try JSON.Decode.Implementation.parse(input, maxDepth: maxDepth)
     }
 
     /// Encodes a JSON value by appending to a UTF-8 byte buffer.
@@ -88,7 +88,7 @@ extension JSON.Coder: Coder_Primitives.Coder.`Protocol` {
         _ output: RFC_8259.Value,
         into buffer: inout [UInt8]
     ) {
-        var encoder = RFC_8259.Encode.Encoder(options: encodeOptions)
+        var encoder = JSON.Encode.Encoder(options: encodeOptions)
         encoder.encode(output, into: &buffer)
     }
 }

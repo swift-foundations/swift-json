@@ -236,7 +236,7 @@ extension JSON {
     @inlinable
     public static func parse(_ string: String) throws(JSON.Error) -> JSON {
         do {
-            let value = try RFC_8259.parse(string)
+            let value = try JSON.Decode.parse(string)
             return JSON(value)
         } catch {
             throw JSON.Error(error)
@@ -252,7 +252,7 @@ extension JSON {
     public static func parse<Bytes>(_ bytes: Bytes) throws(JSON.Error) -> JSON
     where Bytes: Swift.Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
         do {
-            let value = try RFC_8259.parse(bytes)
+            let value = try JSON.Decode.parse(bytes)
             return JSON(value)
         } catch {
             throw JSON.Error(error)
@@ -271,8 +271,10 @@ extension JSON {
     /// - Returns: The JSON string.
     @inlinable
     public func serialize(pretty: Bool = false, sortKeys: Bool = false) -> String {
-        let options = RFC_8259.Encode.Options(prettyPrint: pretty, sortKeys: sortKeys)
-        let bytes = raw.encode(options: options)
+        let options = JSON.Encode.Options(prettyPrint: pretty, sortKeys: sortKeys)
+        var bytes: [UInt8] = []
+        var encoder = JSON.Encode.Encoder(options: options)
+        encoder.encode(raw, into: &bytes)
         return String(decoding: bytes, as: UTF8.self)
     }
 
@@ -284,8 +286,11 @@ extension JSON {
     /// - Returns: The UTF-8 encoded JSON bytes.
     @inlinable
     public func serialize(pretty: Bool = false, sortKeys: Bool = false, as: [UInt8].Type) -> [UInt8] {
-        let options = RFC_8259.Encode.Options(prettyPrint: pretty, sortKeys: sortKeys)
-        return raw.encode(options: options)
+        let options = JSON.Encode.Options(prettyPrint: pretty, sortKeys: sortKeys)
+        var bytes: [UInt8] = []
+        var encoder = JSON.Encode.Encoder(options: options)
+        encoder.encode(raw, into: &bytes)
+        return bytes
     }
 }
 

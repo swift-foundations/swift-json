@@ -47,7 +47,7 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
         bytes: Swift.Span<UInt8>,
         limit: Int
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
-        try RFC_8259.Decode.Implementation.parse(bytes, maxDepth: limit)
+        try JSON.Decode.Implementation.parse(bytes, maxDepth: limit)
     }
 
     /// Slow-path — drives the event stream to rebuild the tree.

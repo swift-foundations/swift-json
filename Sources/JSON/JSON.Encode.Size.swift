@@ -1,14 +1,14 @@
-/// RFC_8259.Encode.Size.swift
+/// JSON.Encode.Size.swift
 /// swift-json
 ///
 /// Size estimation for buffer preallocation.
 ///
-/// Relocated to swift-json (L3) under Arc 1.5 — encoding is
-/// implementation, not RFC 8259 spec.
+/// Renamed under Arc 1.6 namespace correction: encoding lives at
+/// `JSON.*`, not at the L2 spec namespace.
 
 public import RFC_8259
 
-extension RFC_8259.Encode {
+extension JSON.Encode {
     /// Estimates serialized size for buffer preallocation.
     public struct Size: Sendable {
         public let value: RFC_8259.Value
@@ -20,7 +20,7 @@ extension RFC_8259.Encode {
     }
 }
 
-extension RFC_8259.Encode.Size {
+extension JSON.Encode.Size {
     /// Returns estimated byte count.
     @inlinable
     public func callAsFunction() -> Int {

@@ -1,14 +1,14 @@
-/// RFC_8259.Encode.Encoder.swift
+/// JSON.Encode.Encoder.swift
 /// swift-json
 ///
 /// Internal encoder state and encoding methods.
 ///
-/// Relocated to swift-json (L3) under Arc 1.5 — encoding is
-/// implementation, not RFC 8259 spec.
+/// Renamed under Arc 1.6 namespace correction: encoding lives at
+/// `JSON.*`, not at the L2 spec namespace.
 
 public import RFC_8259
 
-extension RFC_8259.Encode {
+extension JSON.Encode {
     /// Internal encoder state.
     @usableFromInline
     internal struct Encoder {
@@ -32,7 +32,7 @@ extension RFC_8259.Encode {
 
 // MARK: - Encoder Constants
 
-extension RFC_8259.Encode.Encoder {
+extension JSON.Encode.Encoder {
     /// Hex digit lookup table (0-15 → '0'-'9', 'a'-'f').
     @usableFromInline
     static let hexDigits: [UInt8] = [
@@ -71,7 +71,7 @@ extension RFC_8259.Encode.Encoder {
 
 // MARK: - Encoder Methods
 
-extension RFC_8259.Encode.Encoder {
+extension JSON.Encode.Encoder {
     /// Encodes a value into the buffer.
     @inlinable
     mutating func encode<Buffer: Swift.RangeReplaceableCollection>(

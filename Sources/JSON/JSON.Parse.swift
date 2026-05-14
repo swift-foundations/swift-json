@@ -48,7 +48,7 @@ extension JSON {
         @inlinable
         public func callAsFunction(_ string: String) throws(JSON.Error) -> JSON {
             do {
-                let value = try RFC_8259.parse(string, maxDepth: maxDepth)
+                let value = try JSON.Decode.parse(string, maxDepth: maxDepth)
                 return JSON(value)
             } catch {
                 throw JSON.Error(error)
@@ -64,7 +64,7 @@ extension JSON {
         public func callAsFunction<Bytes>(_ bytes: Bytes) throws(JSON.Error) -> JSON
         where Bytes: Swift.Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
             do {
-                let value = try RFC_8259.parse(bytes, maxDepth: maxDepth)
+                let value = try JSON.Decode.parse(bytes, maxDepth: maxDepth)
                 return JSON(value)
             } catch {
                 throw JSON.Error(error)
@@ -185,7 +185,7 @@ extension JSON {
         @inlinable
         public func parse(_ string: String) throws(JSON.Error) -> JSON {
             do {
-                let value = try RFC_8259.parse(string, maxDepth: maxDepth)
+                let value = try JSON.Decode.parse(string, maxDepth: maxDepth)
                 return JSON(value)
             } catch {
                 throw JSON.Error(error)
@@ -201,7 +201,7 @@ extension JSON {
         public func parse<Bytes>(_ bytes: Bytes) throws(JSON.Error) -> JSON
         where Bytes: Swift.Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
             do {
-                let value = try RFC_8259.parse(bytes, maxDepth: maxDepth)
+                let value = try JSON.Decode.parse(bytes, maxDepth: maxDepth)
                 return JSON(value)
             } catch {
                 throw JSON.Error(error)
@@ -244,10 +244,10 @@ extension JSON {
         @inlinable
         public func parse(_ string: String) throws(Parser.Error.Located<JSON.Error>) -> JSON {
             do {
-                let value = try RFC_8259.parse(string, maxDepth: maxDepth)
+                let value = try JSON.Decode.parse(string, maxDepth: maxDepth)
                 return JSON(value)
             } catch let error {
-                throw Parser.Error.Located<JSON.Error>(JSON.Error(error), at: error.offset)
+                throw Parser.Error.Located<JSON.Error>(JSON.Error(error), at: _offset(of: error))
             }
         }
 
@@ -260,30 +260,32 @@ extension JSON {
         public func parse<Bytes>(_ bytes: Bytes) throws(Parser.Error.Located<JSON.Error>) -> JSON
         where Bytes: Swift.Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
             do {
-                let value = try RFC_8259.parse(bytes, maxDepth: maxDepth)
+                let value = try JSON.Decode.parse(bytes, maxDepth: maxDepth)
                 return JSON(value)
             } catch let error {
-                throw Parser.Error.Located<JSON.Error>(JSON.Error(error), at: error.offset)
+                throw Parser.Error.Located<JSON.Error>(JSON.Error(error), at: _offset(of: error))
             }
         }
     }
 }
 
-// MARK: - RFC_8259.Error Offset Extension
+// MARK: - Internal offset helper
 
-extension RFC_8259.Error {
-    /// The byte offset where this error occurred.
-    @usableFromInline
-    var offset: Text.Position {
-        switch self {
-        case .unexpectedToken(let pos, _, _): return pos.offset
-        case .unexpectedEndOfInput(let pos, _): return pos.offset
-        case .invalidNumber(let pos, _): return pos.offset
-        case .invalidString(let pos, _): return pos.offset
-        case .invalidUTF8(let pos, _): return pos.offset
-        case .depthExceeded(let pos, _): return pos.offset
-        case .trailingContent(let pos): return pos.offset
-        }
+/// Extracts the byte offset from an `RFC_8259.Error` case.
+///
+/// Module-scope free function (not an extension on the spec error
+/// type) — see file header per Arc 1.6 namespace correction: the
+/// spec namespace must host SPEC content only.
+@usableFromInline
+internal func _offset(of error: RFC_8259.Error) -> Text.Position {
+    switch error {
+    case .unexpectedToken(let pos, _, _): return pos.offset
+    case .unexpectedEndOfInput(let pos, _): return pos.offset
+    case .invalidNumber(let pos, _): return pos.offset
+    case .invalidString(let pos, _): return pos.offset
+    case .invalidUTF8(let pos, _): return pos.offset
+    case .depthExceeded(let pos, _): return pos.offset
+    case .trailingContent(let pos): return pos.offset
     }
 }
 

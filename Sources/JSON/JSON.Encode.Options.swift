@@ -1,14 +1,12 @@
-/// RFC_8259.Encode.Options.swift
+/// JSON.Encode.Options.swift
 /// swift-json
 ///
 /// Options for JSON encoding.
 ///
-/// Relocated to swift-json (L3) under Arc 1.5 — encoding is
-/// implementation, not RFC 8259 spec.
+/// Renamed under Arc 1.6 namespace correction: encoding lives at
+/// `JSON.*`, not at the L2 spec namespace.
 
-public import RFC_8259
-
-extension RFC_8259.Encode {
+extension JSON.Encode {
     /// Options for JSON encoding.
     public struct Options: Sendable {
         /// Whether to format with indentation and newlines.

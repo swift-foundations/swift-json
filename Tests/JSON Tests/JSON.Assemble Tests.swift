@@ -74,11 +74,11 @@ struct Tests {
     }
 
     @Test
-    func `Assemble.from output matches public RFC_8259.parse output`() throws {
+    func `Assemble.from output matches public JSON.Decode.parse output`() throws {
         // Round-trip: the assembler's output via Assemble.from MUST
-        // equal the public `RFC_8259.parse(_:)` output on the same bytes.
+        // equal the public `JSON.Decode.parse(_:)` output on the same bytes.
         let bytes: [UInt8] = Swift.Array(#"{"a":1,"b":[true,null,"s"]}"#.utf8)
-        let direct = try RFC_8259.parse(bytes)
+        let direct = try JSON.Decode.parse(bytes)
         try bytes.withUnsafeBufferPointer { (buf: UnsafeBufferPointer<UInt8>) throws(RFC_8259.Error) in
             let span = buf.span
             var stream = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(span)

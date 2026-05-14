@@ -1,25 +1,27 @@
-/// RFC_8259.Decode.Implementation.swift
+/// JSON.Decode.Implementation.swift
 /// swift-json
 ///
 /// Wholesale JSON parser for the contiguous-bytes case.
 ///
-/// Relocated to swift-json (L3) under Arc 1.5 — the wholesale parser
-/// is implementation, not RFC 8259 spec. Phase A1 of the Tier-4
-/// parse-performance work
+/// Relocated to `JSON.Decode.Implementation` namespace under Arc 1.6
+/// — the wholesale parser is implementation and lives under the
+/// `JSON.*` namespace, not the L2 `RFC_8259.*` spec namespace. Phase
+/// A1 of the Tier-4 parse-performance work
 /// (`swift-foundations/swift-json/Research/parse-performance-architecture.md`),
 /// rebased onto `Lexer.Scanner` from swift-lexer-primitives per the
 /// streaming-deserialize placement audit's Ticket T-1
 /// (`swift-institute/Audits/streaming-deserialize-placement-audit.md`).
 ///
-/// Internal type — exposed only to the `RFC_8259.Decode` dispatch
-/// fork. Emits the same `RFC_8259.Value` shape as the public API
-/// surface so backwards compatibility is preserved byte-for-byte.
+/// Internal type — exposed only to the `JSON.Decode` dispatcher and
+/// `JSON.Coder.decode`. Emits `RFC_8259.Value` (the L2 spec value
+/// type) so consumers can use the result with the Codable conformance
+/// directly.
 
 public import Lexer_Primitives
 public import RFC_8259
 @_spi(Unsafe) public import Array_Primitives
 
-extension RFC_8259.Decode {
+extension JSON.Decode {
     /// Wholesale JSON parser.
     ///
     /// `~Copyable & ~Escapable` per the cursor it owns
@@ -29,7 +31,8 @@ extension RFC_8259.Decode {
     /// `RFC_8259.Token` types verbatim.
     ///
     /// Not a public type. The static `parse(_:maxDepth:)` entry point
-    /// is the only call site from `RFC_8259.Decode`.
+    /// is the only call site from `JSON.Decode.parse` and
+    /// `JSON.Coder.decode`.
     @safe
     @usableFromInline
     internal struct Implementation: ~Copyable, ~Escapable {
@@ -67,14 +70,14 @@ extension RFC_8259.Decode {
 
 // MARK: - Entry point
 
-extension RFC_8259.Decode.Implementation {
+extension JSON.Decode.Implementation {
     /// Parses the span and returns a JSON value.
     @inlinable
     internal static func parse(
         _ bytes: borrowing Swift.Span<UInt8>,
         maxDepth: Int
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
-        var parser = RFC_8259.Decode.Implementation(bytes, maxDepth: maxDepth)
+        var parser = JSON.Decode.Implementation(bytes, maxDepth: maxDepth)
         let value = try parser.parse()
         return value
     }
@@ -97,7 +100,7 @@ extension RFC_8259.Decode.Implementation {
 
 // MARK: - Current-position helper
 
-extension RFC_8259.Decode.Implementation {
+extension JSON.Decode.Implementation {
     /// Builds `RFC_8259.Position` from the scanner's current cursor.
     /// Line:column is computed by source scan via
     /// ``Lexer/Scanner/location(at:)`` — O(N) at the throw site,
@@ -122,7 +125,7 @@ extension RFC_8259.Decode.Implementation {
 
 // MARK: - Value parsing
 
-extension RFC_8259.Decode.Implementation {
+extension JSON.Decode.Implementation {
     /// Parses a JSON value.
     ///
     /// Reads the next non-whitespace byte and dispatches by ASCII byte
@@ -178,7 +181,7 @@ extension RFC_8259.Decode.Implementation {
 
 // MARK: - Array parsing (called after `[` is consumed)
 
-extension RFC_8259.Decode.Implementation {
+extension JSON.Decode.Implementation {
     @inlinable
     @_lifetime(self: copy self)
     internal mutating func parseArray() throws(RFC_8259.Error) -> RFC_8259.Value {
@@ -226,7 +229,7 @@ extension RFC_8259.Decode.Implementation {
 
 // MARK: - Object parsing (called after `{` is consumed)
 
-extension RFC_8259.Decode.Implementation {
+extension JSON.Decode.Implementation {
     @inlinable
     @_lifetime(self: copy self)
     internal mutating func parseObject() throws(RFC_8259.Error) -> RFC_8259.Value {
@@ -310,7 +313,7 @@ extension RFC_8259.Decode.Implementation {
 
 // MARK: - Whitespace
 
-extension RFC_8259.Decode.Implementation {
+extension JSON.Decode.Implementation {
     /// Skips whitespace bytes.
     ///
     /// Uses an inlined four-way comparison against the four JSON
@@ -348,7 +351,7 @@ extension RFC_8259.Decode.Implementation {
 
 // MARK: - Literals
 
-extension RFC_8259.Decode.Implementation {
+extension JSON.Decode.Implementation {
     /// Expects the given literal bytes (called after the first byte
     /// has been peeked but NOT advanced).
     ///
@@ -383,7 +386,7 @@ extension RFC_8259.Decode.Implementation {
 
 // MARK: - Strings (returns String directly — no Token wrapping)
 
-extension RFC_8259.Decode.Implementation {
+extension JSON.Decode.Implementation {
     /// Lexes a JSON string (after the leading `"` has been peeked but
     /// NOT advanced). Returns the decoded `String` directly. The Token
     /// wrapping that the generic lexer produces is bypassed — the
@@ -545,7 +548,7 @@ extension RFC_8259.Decode.Implementation {
 
 // MARK: - Numbers
 
-extension RFC_8259.Decode.Implementation {
+extension JSON.Decode.Implementation {
     /// Lexes a JSON number (called after the first byte has been
     /// peeked but NOT advanced). Returns `RFC_8259.Number` directly —
     /// no Token wrapping.
