@@ -265,6 +265,10 @@ extension JSON {
 extension JSON {
     /// Serializes the JSON value to a string.
     ///
+    /// Depth overflow is treated as a precondition-equivalent fault
+    /// at this entry point; consumers needing typed propagation should
+    /// use ``JSON/Coder`` (which throws ``JSON/Encode/Error``).
+    ///
     /// - Parameters:
     ///   - pretty: Whether to format with indentation and newlines.
     ///   - sortKeys: Whether to sort object keys alphabetically.
@@ -274,11 +278,15 @@ extension JSON {
         let options = JSON.Encode.Options(prettyPrint: pretty, sortKeys: sortKeys)
         var bytes: [UInt8] = []
         var encoder = JSON.Encode.Encoder(options: options)
-        encoder.encode(raw, into: &bytes)
+        try! encoder.encode(raw, into: &bytes)
         return String(decoding: bytes, as: UTF8.self)
     }
 
     /// Serializes the JSON value to UTF-8 bytes.
+    ///
+    /// Depth overflow is treated as a precondition-equivalent fault
+    /// at this entry point; consumers needing typed propagation should
+    /// use ``JSON/Coder`` (which throws ``JSON/Encode/Error``).
     ///
     /// - Parameters:
     ///   - pretty: Whether to format with indentation and newlines.
@@ -289,7 +297,7 @@ extension JSON {
         let options = JSON.Encode.Options(prettyPrint: pretty, sortKeys: sortKeys)
         var bytes: [UInt8] = []
         var encoder = JSON.Encode.Encoder(options: options)
-        encoder.encode(raw, into: &bytes)
+        try! encoder.encode(raw, into: &bytes)
         return bytes
     }
 }

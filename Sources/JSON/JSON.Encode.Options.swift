@@ -26,7 +26,12 @@ extension JSON.Encode {
 
         /// Maximum nesting depth (default 512, matching parser).
         ///
-        /// Exceeding this depth triggers a precondition failure.
+        /// Exceeding this depth surfaces ``JSON/Encode/Error/depthExceeded(maxDepth:)``
+        /// on the throwing path (``JSON/Coder``), or a
+        /// precondition-equivalent fault on the non-throwing convenience
+        /// entry points (``JSON/Encode/encode(_:options:)``,
+        /// ``JSON/Encode/encode(_:into:options:)``,
+        /// ``JSON/serialize(pretty:sortKeys:)``).
         public var maxDepth: Int
 
         /// Creates default encoding options.

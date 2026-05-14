@@ -39,9 +39,12 @@ extension JSON {
     /// - `EncodeBuffer` = `[UInt8]`.
     /// - `Output` = ``RFC_8259/Value``.
     /// - `DecodeFailure` = ``RFC_8259/Error``.
-    /// - `EncodeFailure` = `Never` (encoding a well-typed value
-    ///   cannot fail; depth overflow is a precondition failure, not
-    ///   a thrown error, per ``RFC_8259/Encode/Options``).
+    /// - `EncodeFailure` = ``JSON/Encode/Error`` (depth overflow is
+    ///   surfaced as a typed error via the Coder.Protocol path; the
+    ///   non-throwing convenience entry points
+    ///   (``JSON/Encode/encode(_:options:)`` and
+    ///   ``JSON/Encode/encode(_:into:options:)``) preserve their
+    ///   non-throwing contract via `try!`).
     public struct Coder: Sendable {
         /// Maximum nesting depth (default 512).
         public let maxDepth: Int
@@ -67,7 +70,7 @@ extension JSON.Coder: Coder_Primitives.Coder.`Protocol` {
     public typealias EncodeBuffer = [UInt8]
     public typealias Output = RFC_8259.Value
     public typealias DecodeFailure = RFC_8259.Error
-    public typealias EncodeFailure = Never
+    public typealias EncodeFailure = JSON.Encode.Error
 
     /// Decodes a JSON value from a contiguous byte span.
     ///
@@ -89,13 +92,16 @@ extension JSON.Coder: Coder_Primitives.Coder.`Protocol` {
     }
 
     /// Encodes a JSON value by appending to a UTF-8 byte buffer.
+    ///
+    /// Throws ``JSON/Encode/Error/depthExceeded(maxDepth:)`` when
+    /// nesting exceeds ``JSON/Encode/Options/maxDepth``.
     @inlinable
     public func encode(
         _ output: RFC_8259.Value,
         into buffer: inout [UInt8]
-    ) {
+    ) throws(JSON.Encode.Error) {
         var encoder = JSON.Encode.Encoder(options: encodeOptions)
-        encoder.encode(output, into: &buffer)
+        try encoder.encode(output, into: &buffer)
     }
 }
 

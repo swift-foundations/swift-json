@@ -73,11 +73,14 @@ extension JSON.Encode.Encoder {
 
 extension JSON.Encode.Encoder {
     /// Encodes a value into the buffer.
+    ///
+    /// Throws ``JSON/Encode/Error/depthExceeded(maxDepth:)`` when
+    /// nesting exceeds ``JSON/Encode/Options/maxDepth``.
     @inlinable
     mutating func encode<Buffer: Swift.RangeReplaceableCollection>(
         _ value: RFC_8259.Value,
         into buffer: inout Buffer
-    ) where Buffer.Element == UInt8 {
+    ) throws(JSON.Encode.Error) where Buffer.Element == UInt8 {
         switch value {
         case .null:
             buffer.append(contentsOf: Self.keywordNull)
@@ -96,10 +99,10 @@ extension JSON.Encode.Encoder {
             encodeString(s, into: &buffer)
 
         case .array(let a):
-            encodeArray(a, into: &buffer)
+            try encodeArray(a, into: &buffer)
 
         case .object(let o):
-            encodeObject(o, into: &buffer)
+            try encodeObject(o, into: &buffer)
         }
     }
 
@@ -226,10 +229,12 @@ extension JSON.Encode.Encoder {
     mutating func encodeArray<Buffer: Swift.RangeReplaceableCollection>(
         _ array: RFC_8259.Array,
         into buffer: inout Buffer
-    ) where Buffer.Element == UInt8 {
+    ) throws(JSON.Encode.Error) where Buffer.Element == UInt8 {
         buffer.append(.ascii.leftBracket) // [
 
-        precondition(depth < options.maxDepth, "JSON encoding exceeded maximum depth of \(options.maxDepth)")
+        guard depth < options.maxDepth else {
+            throw .depthExceeded(maxDepth: options.maxDepth)
+        }
         depth += 1
 
         var first = true
@@ -244,7 +249,7 @@ extension JSON.Encode.Encoder {
                 appendIndent(into: &buffer)
             }
 
-            encode(element, into: &buffer)
+            try encode(element, into: &buffer)
         }
 
         depth -= 1
@@ -262,10 +267,12 @@ extension JSON.Encode.Encoder {
     mutating func encodeObject<Buffer: Swift.RangeReplaceableCollection>(
         _ object: RFC_8259.Object,
         into buffer: inout Buffer
-    ) where Buffer.Element == UInt8 {
+    ) throws(JSON.Encode.Error) where Buffer.Element == UInt8 {
         buffer.append(.ascii.leftBrace) // {
 
-        precondition(depth < options.maxDepth, "JSON encoding exceeded maximum depth of \(options.maxDepth)")
+        guard depth < options.maxDepth else {
+            throw .depthExceeded(maxDepth: options.maxDepth)
+        }
         depth += 1
 
         var first = true
@@ -282,7 +289,7 @@ extension JSON.Encode.Encoder {
                 encodeString(key, into: &buffer)
                 buffer.append(.ascii.colon)
                 if options.prettyPrint { buffer.append(.ascii.sp) }
-                encode(value, into: &buffer)
+                try encode(value, into: &buffer)
             }
         } else {
             // Direct iteration - no Array copy
@@ -296,7 +303,7 @@ extension JSON.Encode.Encoder {
                 encodeString(key, into: &buffer)
                 buffer.append(.ascii.colon)
                 if options.prettyPrint { buffer.append(.ascii.sp) }
-                encode(value, into: &buffer)
+                try encode(value, into: &buffer)
             }
         }
 
