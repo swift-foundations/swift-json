@@ -1,7 +1,45 @@
 /// JSON.Serializable.swift
 /// swift-json
 ///
-/// Protocol for types that can be serialized to/from JSON
+/// JSON.Serializable is the JSON sibling of the format-Codable family,
+/// mirroring the parser-side Parseable / ASCII.Parseable convention.
+///
+/// ## Family pattern
+///
+/// The institute's `Coder_Primitives.Coder.Protocol` is a generic
+/// leaf-codec abstraction; one Coder per (format × value) pair.
+/// `Coder_Primitives.Codable` is the canonical attachment for types
+/// that have ONE inherent canonical codec — e.g., `RFC_8259.Value:
+/// Codable` with `coder = JSON.Coder()`.
+///
+/// Stdlib types (Int, String, Optional, Array, Dictionary, ...) do
+/// not have a single inherent canonical codec — their representation
+/// is format-specific. So they conform to FORMAT-SPECIFIC sibling
+/// protocols like `JSON.Serializable`, `Binary.LittleEndian.Codable`
+/// (future), etc., rather than to the generic `Codable`. This mirrors
+/// the parser-side pattern where `Int: ASCII.Parseable` lives in
+/// swift-ascii-parser-primitives (format-specific) rather than as a
+/// generic `Int: Parseable`.
+///
+/// ## Composition with the canonical leaf
+///
+/// JSON.Serializable's `init(jsonBytes:)` path composes through
+/// `JSON.Decode.Implementation.parse` — the same leaf that
+/// `RFC_8259.Value.coder` uses. There's no parallel grammar; this
+/// protocol is the JSON-specific surface (event-grain streaming
+/// fast path, format-aware Optional null-sentinel semantics,
+/// ergonomic per-type API) over the same canonical leaf.
+///
+/// ## When to use which
+///
+/// - Use `RFC_8259.Value(decoding: &input)` (canonical Codable) when
+///   you have a span of bytes and want the full JSON value tree.
+/// - Use `T(json:)` / `T.from(eventDecodingJsonBytes:)` (this protocol)
+///   when you have a JSON value or bytes and want to deserialize to
+///   a JSON.Serializable conformer.
+/// - The two compose; `JSON.parse(bytes) → JSON → T(json:)` and
+///   `T.from(eventDecodingJsonBytes: bytes)` use the same underlying
+///   leaf parser.
 
 extension JSON {
     /// A type that can be serialized to and deserialized from JSON.
@@ -9,6 +47,20 @@ extension JSON {
     /// Conform to this protocol to enable direct JSON serialization without
     /// going through Codable. This provides clearer semantics and can be
     /// more efficient.
+    ///
+    /// ## Role in the format-Codable family
+    ///
+    /// JSON.Serializable is a sibling protocol to `Coder_Primitives.Codable`
+    /// rather than a refinement. A type conforming to JSON.Serializable
+    /// declares its JSON representation; a type conforming to
+    /// `Coder_Primitives.Codable` declares its canonical inherent codec.
+    /// Types that have both (`RFC_8259.Value`) carry both conformances
+    /// pointing to the same underlying leaf (JSON.Coder). Types whose
+    /// representation is format-specific (most stdlib types, most
+    /// user-defined types) conform to JSON.Serializable but typically
+    /// NOT to the generic Codable — they may additionally conform to
+    /// sibling protocols for other formats (Binary.LittleEndian.Codable
+    /// future, MessagePack.Codable future, etc.).
     ///
     /// ## Example
     ///
