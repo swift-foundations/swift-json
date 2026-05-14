@@ -50,10 +50,16 @@
 //
 // Timing observations (single-file mode):
 //   - Carrier_Primitives (22 KB):     0.048s total (parse 0.048s)
-//   - Swift stdlib (86 MB):         128.632s total (parse 128.525s)
-//   - swift-json's text parser is the bottleneck at stdlib scale.
-//     Production oracle generation is offline; lint-time consumers
-//     read the compact emitted artifact in milliseconds.
+//   - Swift stdlib (86 MB):         128.632s total (parse 128.525s; pre-Wave-1)
+//
+//   Wave 1 migration (2026-05-14) replaces JSON.parse(raw) + dynamic
+//   walk with OracleSymbolGraph.from(eventDecodingJsonBytes:) +
+//   typed-struct access. Per
+//   streaming-json-deserialize-comparative-analysis.md v1.0.1 §8.4
+//   the absolute saving on this workload is small (Wave 1 is a
+//   verification benefit, not a user-visible benefit) — the
+//   per-quarterly-regeneration wall-clock improves but every-second
+//   was already offline-tractable.
 //
 // Date: 2026-05-13
 //
@@ -76,6 +82,396 @@ extension JSON {
     fileprivate var asString: String? {
         guard isString else { return nil }
         return String(self)
+    }
+}
+
+// MARK: - Oracle Schema (Wave 1 migration to event-grain)
+//
+// Phase A1 of the streaming-deserialize arc per
+// streaming-json-deserialize-comparative-analysis.md v1.0.1 §8.2 Wave 1.
+//
+// The oracle reads a fixed subset of fields from each symbol-graph
+// JSON file. By declaring those fields as a JSON.Serializable schema
+// with deserialize(events:) overrides, the parse+decode replaces the
+// status-quo full-tree JSON.parse(raw) + dynamic walk — closing the
+// 37% partial-shape gap on the 86 MB Swift stdlib symbol graph.
+
+fileprivate struct OracleNames: JSON.Serializable {
+    let title: String?
+
+    static func serialize(_ value: OracleNames) -> JSON {
+        if let title = value.title {
+            return ["title": .string(title)]
+        }
+        return [:]
+    }
+
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> OracleNames {
+        OracleNames(title: json.title.asString)
+    }
+
+    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> OracleNames {
+        try events.expectObjectStart()
+        var title: String? = nil
+        while let token = try events.next() {
+            if token == .objectEnd { break }
+            if token == .comma { continue }
+            guard token == .string else {
+                throw .invalidSyntax(message: "expected key", location: events.position().location)
+            }
+            let key = try events.currentString()
+            try events.expectColon()
+            switch key {
+            case "title":
+                title = try String.deserialize(events: &events)
+            default:
+                try events.skipValue()
+            }
+        }
+        return OracleNames(title: title)
+    }
+}
+
+fileprivate struct OracleKind: JSON.Serializable {
+    let identifier: String?
+
+    static func serialize(_ value: OracleKind) -> JSON {
+        if let id = value.identifier {
+            return ["identifier": .string(id)]
+        }
+        return [:]
+    }
+
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> OracleKind {
+        OracleKind(identifier: json.identifier.asString)
+    }
+
+    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> OracleKind {
+        try events.expectObjectStart()
+        var identifier: String? = nil
+        while let token = try events.next() {
+            if token == .objectEnd { break }
+            if token == .comma { continue }
+            guard token == .string else {
+                throw .invalidSyntax(message: "expected key", location: events.position().location)
+            }
+            let key = try events.currentString()
+            try events.expectColon()
+            switch key {
+            case "identifier":
+                identifier = try String.deserialize(events: &events)
+            default:
+                try events.skipValue()
+            }
+        }
+        return OracleKind(identifier: identifier)
+    }
+}
+
+fileprivate struct OracleIdentifier: JSON.Serializable {
+    let precise: String?
+
+    static func serialize(_ value: OracleIdentifier) -> JSON {
+        if let p = value.precise {
+            return ["precise": .string(p)]
+        }
+        return [:]
+    }
+
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> OracleIdentifier {
+        OracleIdentifier(precise: json.precise.asString)
+    }
+
+    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> OracleIdentifier {
+        try events.expectObjectStart()
+        var precise: String? = nil
+        while let token = try events.next() {
+            if token == .objectEnd { break }
+            if token == .comma { continue }
+            guard token == .string else {
+                throw .invalidSyntax(message: "expected key", location: events.position().location)
+            }
+            let key = try events.currentString()
+            try events.expectColon()
+            switch key {
+            case "precise":
+                precise = try String.deserialize(events: &events)
+            default:
+                try events.skipValue()
+            }
+        }
+        return OracleIdentifier(precise: precise)
+    }
+}
+
+fileprivate struct OracleSymbol: JSON.Serializable {
+    let identifier: OracleIdentifier
+    let kind: OracleKind
+    let pathComponents: [String]?
+    let names: OracleNames?
+
+    static func serialize(_ value: OracleSymbol) -> JSON {
+        var members: [(String, JSON)] = [
+            ("identifier", OracleIdentifier.serialize(value.identifier)),
+            ("kind", OracleKind.serialize(value.kind)),
+        ]
+        if let pc = value.pathComponents {
+            members.append(("pathComponents", .array(pc.map { .string($0) })))
+        }
+        if let n = value.names {
+            members.append(("names", OracleNames.serialize(n)))
+        }
+        return .object(members)
+    }
+
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> OracleSymbol {
+        let identifier = try OracleIdentifier(json: json.identifier)
+        let kind = try OracleKind(json: json.kind)
+        var pc: [String]? = nil
+        if let arr = json.pathComponents.array {
+            pc = arr.compactMap { $0.asString }
+        }
+        var names: OracleNames? = nil
+        if json.names.isObject {
+            names = try OracleNames(json: json.names)
+        }
+        return OracleSymbol(identifier: identifier, kind: kind, pathComponents: pc, names: names)
+    }
+
+    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> OracleSymbol {
+        try events.expectObjectStart()
+        var identifier: OracleIdentifier? = nil
+        var kind: OracleKind? = nil
+        var pathComponents: [String]? = nil
+        var names: OracleNames? = nil
+        while let token = try events.next() {
+            if token == .objectEnd { break }
+            if token == .comma { continue }
+            guard token == .string else {
+                throw .invalidSyntax(message: "expected key", location: events.position().location)
+            }
+            let key = try events.currentString()
+            try events.expectColon()
+            switch key {
+            case "identifier":
+                identifier = try OracleIdentifier.deserialize(events: &events)
+            case "kind":
+                kind = try OracleKind.deserialize(events: &events)
+            case "pathComponents":
+                pathComponents = try [String].deserialize(events: &events)
+            case "names":
+                names = try OracleNames.deserialize(events: &events)
+            default:
+                try events.skipValue()
+            }
+        }
+        guard let identifier = identifier, let kind = kind else {
+            throw .missingKey("identifier or kind")
+        }
+        return OracleSymbol(identifier: identifier, kind: kind, pathComponents: pathComponents, names: names)
+    }
+}
+
+fileprivate struct OracleRelationship: JSON.Serializable {
+    let kind: String?
+    let source: String?
+    let target: String?
+
+    static func serialize(_ value: OracleRelationship) -> JSON {
+        var members: [(String, JSON)] = []
+        if let k = value.kind { members.append(("kind", .string(k))) }
+        if let s = value.source { members.append(("source", .string(s))) }
+        if let t = value.target { members.append(("target", .string(t))) }
+        return .object(members)
+    }
+
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> OracleRelationship {
+        OracleRelationship(
+            kind: json.kind.asString,
+            source: json.source.asString,
+            target: json.target.asString
+        )
+    }
+
+    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> OracleRelationship {
+        try events.expectObjectStart()
+        var kind: String? = nil
+        var source: String? = nil
+        var target: String? = nil
+        while let token = try events.next() {
+            if token == .objectEnd { break }
+            if token == .comma { continue }
+            guard token == .string else {
+                throw .invalidSyntax(message: "expected key", location: events.position().location)
+            }
+            let key = try events.currentString()
+            try events.expectColon()
+            switch key {
+            case "kind":
+                kind = try String.deserialize(events: &events)
+            case "source":
+                source = try String.deserialize(events: &events)
+            case "target":
+                target = try String.deserialize(events: &events)
+            default:
+                try events.skipValue()
+            }
+        }
+        return OracleRelationship(kind: kind, source: source, target: target)
+    }
+}
+
+fileprivate struct OracleModule: JSON.Serializable {
+    let name: String?
+
+    static func serialize(_ value: OracleModule) -> JSON {
+        if let n = value.name {
+            return ["name": .string(n)]
+        }
+        return [:]
+    }
+
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> OracleModule {
+        OracleModule(name: json.name.asString)
+    }
+
+    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> OracleModule {
+        try events.expectObjectStart()
+        var name: String? = nil
+        while let token = try events.next() {
+            if token == .objectEnd { break }
+            if token == .comma { continue }
+            guard token == .string else {
+                throw .invalidSyntax(message: "expected key", location: events.position().location)
+            }
+            let key = try events.currentString()
+            try events.expectColon()
+            switch key {
+            case "name":
+                name = try String.deserialize(events: &events)
+            default:
+                try events.skipValue()
+            }
+        }
+        return OracleModule(name: name)
+    }
+}
+
+fileprivate struct OracleMetadata: JSON.Serializable {
+    let generator: String?
+
+    static func serialize(_ value: OracleMetadata) -> JSON {
+        if let g = value.generator {
+            return ["generator": .string(g)]
+        }
+        return [:]
+    }
+
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> OracleMetadata {
+        OracleMetadata(generator: json.generator.asString)
+    }
+
+    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> OracleMetadata {
+        try events.expectObjectStart()
+        var generator: String? = nil
+        while let token = try events.next() {
+            if token == .objectEnd { break }
+            if token == .comma { continue }
+            guard token == .string else {
+                throw .invalidSyntax(message: "expected key", location: events.position().location)
+            }
+            let key = try events.currentString()
+            try events.expectColon()
+            switch key {
+            case "generator":
+                generator = try String.deserialize(events: &events)
+            default:
+                try events.skipValue()
+            }
+        }
+        return OracleMetadata(generator: generator)
+    }
+}
+
+fileprivate struct OracleSymbolGraph: JSON.Serializable {
+    let module: OracleModule
+    let metadata: OracleMetadata?
+    let symbols: [OracleSymbol]
+    let relationships: [OracleRelationship]
+
+    static func serialize(_ value: OracleSymbolGraph) -> JSON {
+        var members: [(String, JSON)] = [
+            ("module", OracleModule.serialize(value.module)),
+            ("symbols", .array(value.symbols.map { OracleSymbol.serialize($0) })),
+            ("relationships", .array(value.relationships.map { OracleRelationship.serialize($0) })),
+        ]
+        if let m = value.metadata {
+            members.append(("metadata", OracleMetadata.serialize(m)))
+        }
+        return .object(members)
+    }
+
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> OracleSymbolGraph {
+        let module = try OracleModule(json: json.module)
+        var metadata: OracleMetadata? = nil
+        if json.metadata.isObject {
+            metadata = try OracleMetadata(json: json.metadata)
+        }
+        var symbols: [OracleSymbol] = []
+        if let arr = json.symbols.array {
+            symbols.reserveCapacity(arr.count)
+            for elt in arr {
+                symbols.append(try OracleSymbol.deserialize(elt))
+            }
+        }
+        var relationships: [OracleRelationship] = []
+        if let arr = json.relationships.array {
+            relationships.reserveCapacity(arr.count)
+            for elt in arr {
+                relationships.append(try OracleRelationship.deserialize(elt))
+            }
+        }
+        return OracleSymbolGraph(
+            module: module,
+            metadata: metadata,
+            symbols: symbols,
+            relationships: relationships
+        )
+    }
+
+    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> OracleSymbolGraph {
+        try events.expectObjectStart()
+        var module: OracleModule? = nil
+        var metadata: OracleMetadata? = nil
+        var symbols: [OracleSymbol]? = nil
+        var relationships: [OracleRelationship]? = nil
+        while let token = try events.next() {
+            if token == .objectEnd { break }
+            if token == .comma { continue }
+            guard token == .string else {
+                throw .invalidSyntax(message: "expected key", location: events.position().location)
+            }
+            let key = try events.currentString()
+            try events.expectColon()
+            switch key {
+            case "module":
+                module = try OracleModule.deserialize(events: &events)
+            case "metadata":
+                metadata = try OracleMetadata.deserialize(events: &events)
+            case "symbols":
+                symbols = try [OracleSymbol].deserialize(events: &events)
+            case "relationships":
+                relationships = try [OracleRelationship].deserialize(events: &events)
+            default:
+                try events.skipValue()
+            }
+        }
+        return OracleSymbolGraph(
+            module: module ?? OracleModule(name: nil),
+            metadata: metadata,
+            symbols: symbols ?? [],
+            relationships: relationships ?? []
+        )
     }
 }
 
@@ -112,6 +508,11 @@ fileprivate struct PerInputStats {
 /// CROSS-MODULE protocol→protocol refinements (e.g.,
 /// `Comparison.Protocol: Equation.Protocol` where the source's symbol
 /// graph references a target defined in a sibling module).
+///
+/// Migrated Wave 1 (2026-05-14): the `root: JSON` (dynamic tree) is
+/// replaced by `graph: OracleSymbolGraph` (event-grain decoded struct).
+/// The struct retains exactly the fields the oracle reads — identifier,
+/// kind, pathComponents, names, plus relationships' kind/source/target.
 fileprivate struct InputSymbols {
     let path: String
     let module: String
@@ -119,7 +520,8 @@ fileprivate struct InputSymbols {
     let localProtocolCount: Int
     let relationshipsCount: Int
     let parseSeconds: Double
-    let root: JSON  // retained for pass-2 relationship walk
+    let graph: OracleSymbolGraph
+    let toolchainGenerator: String?
 }
 
 /// Pass 1: parse one input; collect symbol identities into shared maps.
@@ -130,28 +532,24 @@ fileprivate func loadSymbols(
     protocolIDs: inout Set<String>
 ) throws -> InputSymbols {
     let startedAt = Date()
-    let raw = try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
-    let root = try JSON.parse(raw)
+    // Migrated from `String(contentsOf:) + JSON.parse(raw)` to event-grain
+    // decode per Wave 1 of streaming-deserialize-comparative-analysis v1.0.1.
+    let data = try Data(contentsOf: URL(fileURLWithPath: path))
+    let bytes: [UInt8] = Swift.Array(data)
+    let graph = try OracleSymbolGraph.from(eventDecodingJsonBytes: bytes)
     let parsedAt = Date()
-    let moduleName = root.module.name.asString ?? "<unknown>"
+    let moduleName = graph.module.name ?? "<unknown>"
 
-    guard let symbols = root.symbols.array else {
-        throw OracleError.malformedInput(path: path, reason: "no `symbols` array")
-    }
     var localProtocolCount = 0
-    for sym in symbols {
-        guard let preciseID = sym.identifier.precise.asString,
-              let kindID = sym.kind.identifier.asString
+    for sym in graph.symbols {
+        guard let preciseID = sym.identifier.precise,
+              let kindID = sym.kind.identifier
         else { continue }
         var components: [String] = []
-        if let arr = sym.pathComponents.array {
-            for c in arr {
-                if let s = c.asString {
-                    components.append(s)
-                }
-            }
+        if let pc = sym.pathComponents {
+            components = pc
         }
-        if components.isEmpty, let title = sym.names.title.asString {
+        if components.isEmpty, let title = sym.names?.title {
             components = [title]
         }
         if let leaf = components.last, symbolLeafByID[preciseID] == nil {
@@ -167,15 +565,15 @@ fileprivate func loadSymbols(
         }
     }
 
-    let relationships = root.relationships.array ?? []
     return InputSymbols(
         path: path,
         module: moduleName,
-        symbolCount: symbols.count,
+        symbolCount: graph.symbols.count,
         localProtocolCount: localProtocolCount,
-        relationshipsCount: relationships.count,
+        relationshipsCount: graph.relationships.count,
         parseSeconds: parsedAt.timeIntervalSince(startedAt),
-        root: root
+        graph: graph,
+        toolchainGenerator: graph.metadata?.generator
     )
 }
 
@@ -188,16 +586,14 @@ fileprivate func processInput(
     protocolIDs: Set<String>,
     accumulator: inout Set<RefinementPair>
 ) -> PerInputStats {
-    let root = inputSymbols.root
-    let relationships = root.relationships.array ?? []
     var conformsToCount = 0
     var conformsToOtherKinds = 0
     var perFilePairs = 0
-    for rel in relationships {
-        guard let kind = rel.kind.asString, kind == "conformsTo" else { continue }
+    for rel in inputSymbols.graph.relationships {
+        guard let kind = rel.kind, kind == "conformsTo" else { continue }
         conformsToCount += 1
-        guard let source = rel.source.asString,
-              let target = rel.target.asString
+        guard let source = rel.source,
+              let target = rel.target
         else { continue }
         let sourceIsProtocol = protocolIDs.contains(source)
         let targetIsProtocol = protocolIDs.contains(target)
@@ -225,7 +621,7 @@ fileprivate func processInput(
         module: inputSymbols.module,
         symbolCount: inputSymbols.symbolCount,
         protocolCount: inputSymbols.localProtocolCount,
-        relationshipsCount: relationships.count,
+        relationshipsCount: inputSymbols.relationshipsCount,
         conformsToCount: conformsToCount,
         refinementsCount: perFilePairs,
         conformsToOtherKinds: conformsToOtherKinds,
@@ -330,16 +726,7 @@ func main() throws {
     let swiftPath = "\(outputDir)/\(swiftFileName)"
     let runDate = ISO8601DateFormatter().string(from: Date()).prefix(10)
     let modulesList = perInputStats.map { $0.module }.joined(separator: ", ")
-    let toolchainGenerator: String = {
-        guard
-            let firstPath = inputPaths.first,
-            let raw = try? String(contentsOf: URL(fileURLWithPath: firstPath), encoding: .utf8),
-            let root = try? JSON.parse(raw)
-        else {
-            return "<unknown>"
-        }
-        return root.metadata.generator.asString ?? "<unknown>"
-    }()
+    let toolchainGenerator: String = loadedInputs.first?.toolchainGenerator ?? "<unknown>"
     var swiftSource = """
         // ===----------------------------------------------------------------------===//
         //
