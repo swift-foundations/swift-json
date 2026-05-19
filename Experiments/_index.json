@@ -1,11 +1,27 @@
 {
   "$schema": "https://swift-institute.org/schemas/experiments-index-v1.json",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-05-13",
+  "generatedAt": "2026-05-18",
   "title": "swift-json Experiments",
   "blurb": "Experiments grounded in swift-json's parsing API.",
   "scope": "swift-foundations/swift-json",
   "experiments": [
+    {
+      "directory": "codec-throughput-vs-newcodable",
+      "category": "comparative-measurement",
+      "purpose": "Replicate Apple's NewCodable JSON benchmark suite against swift-json's `JSON.Serializable`, on the canonical twitter.json / canada.json / citm_catalog.json payloads with Apple's exact 256-iter MINIMUM-interval methodology and MB/s throughput. Five codec paths per payload: (1) Foundation.JSONDecoder / JSONEncoder baseline; (2) Apple NewCodable JSON-specific path (JSONDecodable / JSONEncodable via JSONParserDecoder); (3) Apple NewCodable common path (CommonDecodable / CommonEncodable); (4) Swift Institute JSON.Serializable tree-grain (`JSON.parse` + `T.deserialize(_:)`); (5) Swift Institute JSON.Serializable event-grain (`T.deserialize(events:)`). Driven by the architectural map at swift-institute/Research/ (TBD) and the comparison synthesis from the 2026-03-06 forum thread.",
+      "date": "2026-05-18",
+      "toolchain": "Apple Swift 6.3+",
+      "status": "PENDING",
+      "statusDetail": "Skeleton landed 2026-05-18 against swift-foundation `experimental/new-codable` HEAD `9ad63ed` (CodableBy macro, CodingStrategy protocols, CodingStrategySyntax #1945). Synthetic Person schema verifies harness compile + run end-to-end across all five paths against an in-code-generated [Person] payload (no fixture file). Real payload schemas (Twitter / Canada / Catalog) await porting from Apple's Tests/NewCodableBenchmarks/{Twitter,CoordinateFormat,Catalog}.swift + companion *Common.swift files + hand-written JSON.Serializable conformances on the institute side. Transitions to CONFIRMED / REFUTED / PARTIAL after the one-shot run across all three payloads.",
+      "statusRaw": "PENDING",
+      "crossRefs": [
+        "swift-foundations/swift-json/Sources/JSON/JSON.Serializable.swift",
+        "swift-foundations/swift-json/Experiments/parse-performance-bench/",
+        "https://github.com/swiftlang/swift-foundation/tree/experimental/new-codable",
+        "https://forums.swift.org/t/new-codable-prototype-available-for-feedback/85186"
+      ]
+    },
     {
       "directory": "parse-performance-bench",
       "category": "measurement-and-verification",
@@ -35,6 +51,20 @@
         "swift-foundations/swift-json/Research/parse-performance-architecture.md",
         "swift-foundations/swift-json/Research/parse-performance.md",
         "swift-primitives/swift-parser-primitives/Experiments/suppressed-escapable-associated-types/"
+      ]
+    },
+    {
+      "directory": "double-json-binary-dual-conformance",
+      "category": "compiler-binding-verification",
+      "purpose": "Verify that a single Swift type (Double) can simultaneously conform to two sibling format-Codable protocols (JSON.Serializable from swift-json + Binary.Serializable from swift-binary-primitives, declared in different packages) with no diagnostic conflicts, usable round-trip behavior in both formats, and deterministic call-site disambiguation when both protocol surfaces are in scope. Empirical foundation for the family-pattern claim in JSON.Serializable.swift's J1d doc-pass (commit 0307edc).",
+      "date": "2026-05-14",
+      "toolchain": "Apple Swift 6.3",
+      "status": "CONFIRMED",
+      "statusDetail": "V1 (compile-clean dual conformance), V2 (JSON round-trip lossless for finites), V3 (Binary IEEE-754 bit-pattern preserved for all values including NaN / ±infinity), V4 Cases A/B/C (explicit type context disambiguates correctly). V4 Case D prediction REFUTED in a favorable direction: `let mystery = Double.serialize(3.14)` with NO explicit type context was predicted to be an ambiguity error; empirically Swift's overload resolution favors JSON.Serializable's non-generic `serialize(_:) -> JSON` over Binary.Serializable's generic protocol-extension `serialize<Bytes>(_:) -> Bytes`, resolving deterministically to JSON. Debug + release both green per [EXP-017]; cross-module verified (Double's JSON.Serializable conformance from swift-json package + Probe library declaring Binary.Serializable conformance in this experiment package).",
+      "statusRaw": "CONFIRMED",
+      "crossRefs": [
+        "swift-foundations/swift-json/Sources/JSON/JSON.Serializable.swift",
+        "swift-primitives/swift-binary-primitives/Sources/Binary Serializable Primitives/Binary.Serializable.swift"
       ]
     },
     {
