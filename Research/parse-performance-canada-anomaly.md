@@ -2,9 +2,9 @@
 
 <!--
 ---
-version: 1.0.0
+version: 1.1.0
 last_updated: 2026-05-19
-status: RECOMMENDATION
+status: RECOMMENDATION (Patches 1+2 LANDED; Patch 3 LANDED with negative result)
 tier: 1
 ---
 -->
@@ -539,6 +539,157 @@ proves a workload that the per-Number fix doesn't close.
   array boundary detection; consumer code at line 412/431 of
   `JSONParserDecoder.swift` pulls each element into typed storage
   directly.
+
+---
+
+## v1.1.0 — Patch 3 LANDED, Predicted Wall-Clock Win Did NOT Materialize
+
+Date: 2026-05-19. EL parser implemented + integrated + benchmarked.
+
+### What landed
+
+- `swift-primitives/swift-ascii-parser-primitives` commits `4f8f572` +
+  `56bf873`:
+  - `ASCII.Decimal.Float.Parser<Input>` (`Parser.Protocol` conformer)
+    parses ASCII decimal floats from any `Collection.Slice.Protocol`
+    byte source via three-tier strategy:
+    (1) Clinger fast path for mantissa ≤ 2⁵³−1 and exponent in [−22, 22],
+    (2) Eisel–Lemire core via `UInt64.multipliedFullWidth(by:)` + a
+        verbatim port of fast_float's 128-bit power-of-five table
+        (q ∈ [−342, +308], 651 entries × 2 UInt64 ≈ 10 KiB rodata),
+    (3) Slow path — stdlib `Double.init(_: String)` for >19-digit
+        literals (rare in JSON).
+  - `ASCII.Decimal.Float.parse(_: borrowing Swift.Span<UInt8>)` static
+    span entry for hot-path callers (`Swift.Span<UInt8>` does not
+    conform to `Collection.Slice.Protocol` — separate entry point).
+  - 30 stdlib-agreement tests passing on Swift 6.3.2 / macOS 26 arm64,
+    including canada coordinate shape, subnormals, infinities,
+    neg-zero, 19-digit boundary, 20-digit slow path, JSON-typical
+    numbers, round-to-even edges.
+- `swift-foundations/swift-json` (this doc's repo): `lexNumberValue`
+  float branch now calls `ASCII.Decimal.Float.parse(span)` directly on
+  the inline-storage span. `numStr: String` allocation is eliminated
+  on the float branch (integer branch keeps it for
+  `Int64`/`UInt64`/fallback `Double`).
+
+### What the wall-clock said
+
+Methodology: min-of-3, SUM over 256 iterations, same
+`parse-performance-bench` harness as v1.0.0, same machine.
+
+| Payload | Pre-EL (ms/iter) | Post-EL (ms/iter) | Δ |
+|---|---:|---:|---:|
+| Twitter (617 KB, 7821 floats) | 3.61 | 3.33 | −7.8% |
+| Canada (2.15 MB, 111126 floats) | 253.3 | 239.5 | −5.5% |
+| CITM (1.65 MB, 14986 floats) | 19.6 | 18.5 | −5.6% |
+
+Predicted canada wall-clock per v1.0.0's "Comparison summary" table:
+**30–60 ms/iter** (~2–4× Foundation). Observed: **239.5 ms/iter**
+(~17× Foundation), virtually unchanged.
+
+The handoff that authored Patches 1+2 framed `Double.init(_: String)`
+as "the dominant cost (~111–222 ms per parse of the 246 ms)". This
+framing is **empirically wrong**. The actual `Double.init(_: String)`
+cost on canada is closer to ~10 ms per parse (the v1.0.0 doc's deep-
+level estimate of ~75 ns × 111,126 calls ≈ 8.3 ms; the 111–222 ms
+figure conflated total parse cost with float-parse cost).
+
+### Where the 239 ms actually goes
+
+Bounded empirically by what Patches 1, 2, and 3 collectively *failed*
+to budge:
+
+- Allocator traffic (Patches 1+2 attacked): −7 ms / 246 ms total
+  (~3%). Real but minor.
+- `Double.init(_: String)` (Patch 3 attacked): −7 ms / 246 ms total
+  (~3%). Real but minor.
+- **Remaining ~230 ms must be in the tree-construction layer**:
+  - `RFC_8259.Value` enum allocation × 333K+ Values per parse (1 per
+    Number + 1 per Array node + nesting).
+  - `[RFC_8259.Value].append` doublings across the 56K intermediate
+    arrays (Patch 2's `reserveCapacity(4)` covered the leaf-array
+    case but not the longer ring arrays).
+  - Tree teardown via `outlined destroy of RFC_8259.Value` — was
+    ~15% on the symbol-graph workload, materially more on canada's
+    deeper tree.
+
+The framing "swift-json is slow on canada because the tree is the
+wrong shape for numeric-heavy data" (v1.0.0 § Out of scope) is now
+strongly supported by empirical bounds: the three small patches that
+addressed everything *outside* the tree shape collectively saved
+~14 ms; the remaining ~230 ms is structurally constrained by
+`RFC_8259.Value`'s tree.
+
+### What this means for the canada anomaly
+
+The anomaly is **not closeable by faster float parsing**. It is also
+**not closeable by faster allocator pressure** (Patch 1's framing was
+already weak; v1.1.0 confirms). The 17× Foundation gap is a
+**value-tree-shape** problem. Closing it requires one of:
+
+- A different tree shape that doesn't pay `RFC_8259.Value` per
+  Number. `value-tree-redesign-v2.md` was SUPERSEDED-BY-EVIDENCE
+  (refcount-per-copy dominated O(1) gains at small N); a different
+  shape may be needed. Out of scope here.
+- A consumer-driven path that bypasses the tree entirely — the
+  `JSON.Span.EventStream` event-grain arc (`bytes → consumer struct`
+  via `JSON.Serializable` conformances). Closes the gap for
+  consumers that don't need the tree; doesn't close it for those
+  that do.
+
+### What the EL landing *did* deliver
+
+Independent of canada's wall-clock:
+
+- L1 primitive (`ASCII.Decimal.Float.Parser`) reusable by every
+  downstream JSON/TOML/CSV/YAML consumer.
+- Allocator-traffic reduction: ~111K String allocations × ~20 bytes
+  ≈ 2.2 MB per canada parse, eliminated.
+- Twitter and CITM both pick up ~6–8% from the elimination, stable
+  across runs.
+- Correctness floor: 30 stdlib-agreement tests including subnormal,
+  infinity, neg-zero, round-to-even. Future consumers parsing edge-
+  case floats get a typed-throws-clean path.
+
+### Hypothesis disposition (final)
+
+- v1.0.0 hypothesis "per-element allocation in the array path
+  dominates": PARTIALLY CONFIRMED — array allocator is a contributor
+  but minor (~3%).
+- v1.0.0 hypothesis "`Double.init(_: String)` IS the dominant cost":
+  **REJECTED**. Float-parsing cost is ~10 ms, not ~100+ ms.
+- v1.0.0 projection "Patches 1+2+3 close most of the bytes-→-tree
+  gap, bringing canada to 30–60 ms": **REJECTED**. Patches 1+2+3
+  delivered ~7% total improvement (~246 → ~239 ms). The bytes-→-tree
+  gap is structurally bound by `RFC_8259.Value`-tree cost; no patch
+  to allocator pressure or float parsing closes it.
+- New hypothesis: "the residual 230 ms is `RFC_8259.Value` enum
+  allocation + tree teardown + intermediate array doublings". Bounded
+  empirically by elimination; not yet directly profiled.
+
+### Recommendation (revised)
+
+- Patches 1+2+3 have landed. They are correctness-positive and yield
+  modest (~6–8%) speedups on numeric workloads — keep them.
+- The canada anomaly is now a **tree-shape problem**, not a parser
+  problem. Recommendations for closing the 17× gap belong in a
+  separate research arc focused on `RFC_8259.Value` allocation /
+  teardown / array growth.
+- Consumers willing to bypass `RFC_8259.Value` entirely (consume
+  events into typed structs via `JSON.Serializable`) should look at
+  the `JSON.Span.EventStream` arc — that's the path to NewCodable-
+  class performance on bytes → struct, independent of this anomaly.
+
+### Skill references (v1.1.0 additions)
+
+- [HANDOFF-016] (proposal-staleness, premise-staleness axes) —
+  v1.0.0's premise about `Double.init(_: String)` cost was stale
+  against the empirical 6 ms / 246 ms ratio.
+- [RES-018] — correctness-and-evergreen judgment carried this work;
+  the EL parser is the right L1 primitive regardless of whether it
+  closes canada specifically.
+- [BENCH-005] — comparison benchmark methodology preserved across
+  v1.0.0 → v1.1.0; same harness, same payloads, same SUM-over-256.
 
 ### Skill references
 

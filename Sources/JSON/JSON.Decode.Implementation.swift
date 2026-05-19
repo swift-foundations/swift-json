@@ -17,6 +17,7 @@
 /// type) so consumers can use the result with the Codable conformance
 /// directly.
 
+public import ASCII_Decimal_Parser_Primitives
 public import Lexer_Primitives
 public import RFC_8259
 @_spi(Unsafe) public import Array_Primitives
@@ -633,21 +634,24 @@ extension JSON.Decode.Implementation {
         }
 
         // Hot path: build `Original` directly from the inline-storage
-        // span (no intermediate `Swift.Array`), and materialize the
-        // String for Double/Int parsing exactly once via
-        // unsafe-uninitialized capacity. Replaces 3 heap allocations
-        // per Number with 1 — see parse-performance-canada-anomaly.md.
+        // span (no intermediate `Swift.Array`). Float branch parses
+        // off the span via Eisel–Lemire — no `numStr` allocation.
+        // Integer branch keeps `numStr` for Int64/UInt64 parsing.
+        // See parse-performance-canada-anomaly.md v1.1.0.
         let span = bytes.span
         let original = RFC_8259.Number.Original(span)
-        let numStr = String(unsafeUninitializedCapacity: span.count) { dst in
-            for i in 0..<span.count {
-                dst[i] = span[i]
-            }
-            return span.count
-        }
 
         if isFloat {
-            guard let value = Double(numStr), value.isFinite else {
+            let value: Double
+            do {
+                value = try ASCII.Decimal.Float.parse(span)
+            } catch {
+                throw .invalidNumber(
+                    at: position(at: startCursor),
+                    reason: .overflow
+                )
+            }
+            guard value.isFinite else {
                 throw .invalidNumber(
                     at: position(at: startCursor),
                     reason: .overflow
@@ -655,6 +659,12 @@ extension JSON.Decode.Implementation {
             }
             return RFC_8259.Number(value, original: original)
         } else {
+            let numStr = String(unsafeUninitializedCapacity: span.count) { dst in
+                for i in 0..<span.count {
+                    dst[i] = span[i]
+                }
+                return span.count
+            }
             if let value = Int64(numStr) {
                 return RFC_8259.Number(value, original: original)
             } else if let value = UInt64(numStr) {

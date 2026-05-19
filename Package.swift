@@ -18,6 +18,7 @@ let package = Package(
         .package(path: "../../swift-ietf/swift-rfc-8259"),
         .package(path: "../../swift-primitives/swift-parser-primitives"),
         .package(path: "../../swift-primitives/swift-array-primitives"),
+        .package(path: "../../swift-primitives/swift-ascii-parser-primitives"),
         .package(path: "../../swift-primitives/swift-coder-primitives"),
         .package(path: "../swift-async")
     ],
@@ -28,6 +29,7 @@ let package = Package(
                 .product(name: "RFC 8259", package: "swift-rfc-8259"),
                 .product(name: "Parser Error Primitives", package: "swift-parser-primitives"),
                 .product(name: "Array Primitives", package: "swift-array-primitives"),
+                .product(name: "ASCII Decimal Parser Primitives", package: "swift-ascii-parser-primitives"),
                 .product(name: "Coder Primitives", package: "swift-coder-primitives"),
                 .product(name: "Async", package: "swift-async")
             ]

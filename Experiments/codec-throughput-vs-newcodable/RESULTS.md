@@ -161,3 +161,92 @@ class of workload. Canada gives it a concrete number to beat
 
 See the follow-up performance-investigation research doc in
 `swift-json/Research/` (to be authored via `/research-process`).
+
+---
+
+## Update — 2026-05-19 (post-EL integration)
+
+Eisel–Lemire fast Double parser landed in
+`swift-primitives/swift-ascii-parser-primitives` (commits `4f8f572` +
+`56bf873`) and wired into `lexNumberValue`'s float branch (this
+commit). The String-allocation per Number on the float branch is now
+gone; `Double.init(_: String)` is no longer called for any
+`isFloat == true` token. Integer branch is unchanged.
+
+### Re-measured (same harness, same payloads, same methodology)
+
+Methodology: min-of-3, SUM over 256 iterations from
+`parse-performance-bench` on macOS 26 arm64, Swift 6.3.2 release.
+"Pre" rows are the 2026-05-19 figures from the table above; "Post"
+is this update.
+
+| Payload | Path | Pre (ms/iter) | Post (ms/iter) | Δ |
+|---|---|---:|---:|---:|
+| Twitter 617 KB | `JSON.parse([UInt8])` | 3.61 | 3.33 | −7.8% |
+| Canada 2.15 MB | `JSON.parse([UInt8])` | 253.3 | 239.5 | −5.5% |
+| CITM 1.65 MB | `JSON.parse([UInt8])` | 19.6 | 18.5 | −5.6% |
+
+Canada variance was wider this run (61–137 s SUM across attempts);
+the 239.5 ms cite is min-of-3. Twitter and CITM were stable
+(±0.07 s across runs).
+
+### Hypothesis disposition
+
+PARTIALLY CONFIRMED at the algorithm level: the EL parser produces
+correct binary64 across 30+ stdlib-agreement tests (canada coordinate
+shape, subnormals, infinities, neg-zero, 19-digit boundary,
+round-to-even edges) and is being called from `lexNumberValue` on
+every float branch (verified by symbol presence in the release
+binary).
+
+REJECTED at the wall-clock level: the predicted **30–60 ms/iter
+canada regime** did not materialize. Actual delta is ~6 ms, an order
+of magnitude smaller than projected. Two corollaries:
+
+1. The handoff's premise that "`Double.init(String)` IS the dominant
+   cost (~111–222 ms per parse of the 246 ms)" was empirically wrong.
+   The real `Double.init(String)` cost on canada is closer to ~10 ms
+   (the research doc's deep-level estimate of ~75 ns × 111,126 calls);
+   the 111–222 ms framing conflated total parse cost with
+   float-parse cost.
+2. The residual ~230 ms must therefore be elsewhere. Likely culprits
+   (none addressed by this arc):
+   - `RFC_8259.Value` enum allocation × 333K+ Values per parse
+     (1 per number + 1 per array node + nesting). Per-Value overhead
+     dominates.
+   - `[RFC_8259.Value].append` doublings across 56K arrays
+     (Patch 2 mitigated leaf arrays at 4-element reserveCapacity, but
+     the intermediate ring arrays still double).
+   - Tree teardown via `outlined destroy of RFC_8259.Value` (~15%
+     of parse time on the symbol-graph workload; proportionally
+     larger on canada's deeper tree).
+
+The canada anomaly is **not** a float-parsing problem. It is a
+**tree-construction-and-teardown** problem at the `RFC_8259.Value`
+level. Future arcs targeting this gap should look at value-tree
+shape (`value-tree-redesign-v2.md` was rolled back per the
+SUPERSEDED-BY-EVIDENCE note; a different shape may be needed) or at
+the streaming-deserialize event-grain path for consumers that don't
+require a materialized tree.
+
+### What the EL landing *did* deliver
+
+- A reusable L1 primitive (`ASCII.Decimal.Float.Parser`) for every
+  downstream JSON/TOML/CSV/YAML consumer that parses decimal floats
+  from ASCII bytes.
+- Elimination of the per-Number `numStr` String allocation on the
+  float branch — concrete allocator-traffic reduction (~111K
+  allocations × ~20 bytes ≈ 2.2 MB per canada parse).
+- Algorithmic-correctness floor: stdlib-agreement on 30+ test cases
+  including subnormals, infinities, neg-zero, 19-digit boundary,
+  round-to-even edges. Future workloads that hit these edge cases
+  benefit from the typed-throws + correctness guarantee independent
+  of the wall-clock outcome on canada.
+
+### Open: where does the canada residue actually go?
+
+A profile-driven follow-up (not part of this arc) would attribute
+the ~239 ms across `RFC_8259.Value` allocation, tree teardown,
+`parseArray` doubling, and any remaining lexer-side cost. The
+allocator-traffic + Double-parse hypotheses are now both empirically
+bounded; whatever remains must be in the tree-shape layer.
