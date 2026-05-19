@@ -13,7 +13,7 @@
 /// (`swift-institute/Audits/streaming-deserialize-placement-audit.md`).
 ///
 /// Internal type — exposed only to the `JSON.Decode` dispatcher and
-/// `JSON.Coder.decode`. Emits `RFC_8259.Value` (the L2 spec value
+/// `JSON.Coder.parse`. Emits `RFC_8259.Value` (the L2 spec value
 /// type) so consumers can use the result with the Codable conformance
 /// directly.
 
@@ -32,7 +32,7 @@ extension JSON.Decode {
     ///
     /// Not a public type. The static `parse(_:maxDepth:)` entry point
     /// is the only call site from `JSON.Decode.parse` and
-    /// `JSON.Coder.decode`.
+    /// `JSON.Coder.parse`.
     @safe
     @usableFromInline
     internal struct Implementation: ~Copyable, ~Escapable {
@@ -192,6 +192,12 @@ extension JSON.Decode.Implementation {
         defer { depth -= 1 }
 
         var elements: [RFC_8259.Value] = []
+        // Pre-reserve a small capacity to eliminate the first 1–2
+        // Array doublings on leaf arrays. `canada.json` has 55 K
+        // leaf `[lng, lat]` arrays where this matches exactly; on
+        // larger arrays the extra capacity is harmless. See
+        // parse-performance-canada-anomaly.md.
+        elements.reserveCapacity(4)
 
         skipWhitespace()
         // Empty array: `[ ]`.
@@ -626,15 +632,19 @@ extension JSON.Decode.Implementation {
             }
         }
 
+        // Hot path: build `Original` directly from the inline-storage
+        // span (no intermediate `Swift.Array`), and materialize the
+        // String for Double/Int parsing exactly once via
+        // unsafe-uninitialized capacity. Replaces 3 heap allocations
+        // per Number with 1 — see parse-performance-canada-anomaly.md.
         let span = bytes.span
-        let byteArray: [UInt8] = .init(unsafeUninitializedCapacity: span.count) { dst, initialized in
+        let original = RFC_8259.Number.Original(span)
+        let numStr = String(unsafeUninitializedCapacity: span.count) { dst in
             for i in 0..<span.count {
                 dst[i] = span[i]
             }
-            initialized = span.count
+            return span.count
         }
-        let original = RFC_8259.Number.Original(byteArray)
-        let numStr = String(decoding: byteArray, as: UTF8.self)
 
         if isFloat {
             guard let value = Double(numStr), value.isFinite else {
