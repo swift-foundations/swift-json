@@ -10,14 +10,15 @@
       "directory": "codec-throughput-vs-newcodable",
       "category": "comparative-measurement",
       "purpose": "Replicate Apple's NewCodable JSON benchmark suite against swift-json's `JSON.Serializable`, on the canonical twitter.json / canada.json / citm_catalog.json payloads with Apple's exact 256-iter MINIMUM-interval methodology and MB/s throughput. Five codec paths per payload: (1) Foundation.JSONDecoder / JSONEncoder baseline; (2) Apple NewCodable JSON-specific path (JSONDecodable / JSONEncodable via JSONParserDecoder); (3) Apple NewCodable common path (CommonDecodable / CommonEncodable); (4) Swift Institute JSON.Serializable tree-grain (`JSON.parse` + `T.deserialize(_:)`); (5) Swift Institute JSON.Serializable event-grain (`T.deserialize(events:)`). Driven by the architectural map at swift-institute/Research/ (TBD) and the comparison synthesis from the 2026-03-06 forum thread.",
-      "date": "2026-05-18",
-      "toolchain": "Apple Swift 6.3+",
-      "status": "PENDING",
-      "statusDetail": "Skeleton landed 2026-05-18 against swift-foundation `experimental/new-codable` HEAD `9ad63ed` (CodableBy macro, CodingStrategy protocols, CodingStrategySyntax #1945). Synthetic Person schema verifies harness compile + run end-to-end across all five paths against an in-code-generated [Person] payload (no fixture file). Real payload schemas (Twitter / Canada / Catalog) await porting from Apple's Tests/NewCodableBenchmarks/{Twitter,CoordinateFormat,Catalog}.swift + companion *Common.swift files + hand-written JSON.Serializable conformances on the institute side. Transitions to CONFIRMED / REFUTED / PARTIAL after the one-shot run across all three payloads.",
-      "statusRaw": "PENDING",
+      "date": "2026-05-19",
+      "toolchain": "Apple Swift 6.3.2 (institute side) + 6.4-dev nightly swift-DEVELOPMENT-SNAPSHOT-2026-03-16-a (Apple side)",
+      "status": "PARTIAL",
+      "statusDetail": "Comparison achieved 2026-05-19 via two-binary split (single-binary skeleton blocked by SIL verifier bug in 5/7+5/12 nightlies on Apple's Twitter.swift:483 SIL). Apple side: ran NewCodableBenchmarks directly inside swift-foundation under 3/16 nightly, captured Foundation vs NewCodable-JSON vs NewCodable-Common numbers on twitter/canada/citm decode AND encode. Institute side: ran parse-performance-bench on the same 3 payloads under 6.3.2 stable, capturing JSON.parse vs Foundation.JSONSerialization (parse-only, no struct mapping). Headlines: NewCodable JSON path is 3.3-7.7x over Foundation JSONDecoder on decode (avg 5.8x — matches Apple's '6x' claim) and 4.1-12.3x on encode (avg 8.5x). swift-json parse is 1.4x slower than Foundation on twitter, 4.7x slower on citm, 17x slower on canada (deep [[Double]] coordinate arrays — anomaly worth investigation arc; see RESULTS.md). Real Person path (institute, all 5 conformances) verified compile-clean against committed sibling fixes to swift-effect-primitives / swift-ownership-primitives / swift-bit-primitives / swift-pair-primitives / swift-either-primitives / swift-coproduct-primitives / swift-posix; full single-binary 5-path run still blocked by toolchain compiler bugs in upstream Apple branches.",
+      "statusRaw": "PARTIAL",
       "crossRefs": [
         "swift-foundations/swift-json/Sources/JSON/JSON.Serializable.swift",
         "swift-foundations/swift-json/Experiments/parse-performance-bench/",
+        "swift-foundations/swift-json/Experiments/codec-throughput-vs-newcodable/RESULTS.md",
         "https://github.com/swiftlang/swift-foundation/tree/experimental/new-codable",
         "https://forums.swift.org/t/new-codable-prototype-available-for-feedback/85186"
       ]
@@ -29,11 +30,12 @@
       "date": "2026-05-13",
       "toolchain": "Apple Swift 6.3+",
       "status": "STANDING",
-      "statusDetail": "Last reading on 86 MB Swift.symbols.json, release, macOS 26 arm64, 3-iter average: Foundation.JSONSerialization 0.299s; swift-json JSON.parse([UInt8]) 0.304s (1.02× Foundation); swift-json JSON.parse(String) 0.316s (1.06× Foundation). Tree equivalence verified across 7 fields (counts, top-level keys, kind discriminators, deep pathComponents). Used as the empirical gate for `parse-performance.md` v1.2.0 DECISION and `parse-performance-architecture.md` v1.0.2 DECISION.",
+      "statusDetail": "Standing reference readings (release, macOS 26 arm64, sum-over-256-iters methodology except symbolgraph-3-iter): (1) 86 MB Swift.symbols.json, 3-iter average: Foundation.JSONSerialization 0.299s; swift-json JSON.parse([UInt8]) 0.304s (1.02× Foundation); swift-json JSON.parse(String) 0.316s (1.06× Foundation). (2) 2026-05-19 new readings on canonical Apple bench payloads, 256-iter sum: twitter.json (617KB) — Foundation.JSONSerialization 2.52ms/iter (250 MB/s), JSON.parse([UInt8]) 3.61ms/iter (175 MB/s; 1.4× slower); citm_catalog.json (1.65MB) — Foundation 4.21ms (410 MB/s), JSON.parse 19.6ms (88 MB/s; 4.7× slower); canada.json (2.15MB) — Foundation 14.4ms (156 MB/s), JSON.parse 253.3ms (9 MB/s; 17× slower — ANOMALY, suspect per-element allocation in nested [[Double]] coordinate arrays, investigation pending). Tree equivalence verified across 7 fields. Used as the empirical gate for `parse-performance.md` v1.2.0 DECISION and `parse-performance-architecture.md` v1.0.2 DECISION; canada anomaly motivates a follow-up perf-investigation research doc.",
       "statusRaw": "STANDING",
       "crossRefs": [
         "swift-foundations/swift-json/Research/parse-performance.md",
         "swift-foundations/swift-json/Research/parse-performance-architecture.md",
+        "swift-foundations/swift-json/Experiments/codec-throughput-vs-newcodable/RESULTS.md",
         "swift-foundations/swift-json/Experiments/parse-performance-tier-4-feasibility/",
         "swift-foundations/swift-json/Experiments/symbol-graph-conformance-oracle/"
       ]
