@@ -74,9 +74,11 @@ internal func _lexString(
     scratch.removeAll(keepingCapacity: true)
     var isASCII = true
 
-    while let byte = scanner.peek() {
-        switch byte {
-        case UInt8.ascii.quotationMark:
+    // Type-up: lift to ASCII.Code at the peek boundary so cases match
+    // ASCII.Code constants directly (JSON tokens are strict ASCII).
+    while let code: ASCII.Code = scanner.peek() {
+        switch code {
+        case .quotationMark:
             scanner.advance()
             if isASCII {
                 let count = scratch.count
@@ -91,21 +93,27 @@ internal func _lexString(
                 return result
             }
             return String(decoding: scratch, as: UTF8.self)
-        case UInt8.ascii.reverseSlant:
+        case .reverseSlant:
             scanner.advance()
             let escapeBytes = try _lexEscape(scanner: &scanner)
             for b in escapeBytes {
                 if b > 0x7F { isASCII = false }
                 scratch.append(b)
             }
-        case 0x00...0x1F:
+        case .nul...ASCII.Code.us:  // 0x00...0x1F (per ASCII.Code Control range)
             throw .invalidString(
                 at: _position(at: scanner.position, scanner: scanner),
-                reason: .controlCharacter(byte)
+                reason: .controlCharacter(code)
             )
         default:
-            if byte > 0x7F { isASCII = false }
-            scratch.append(byte)
+            // Non-control byte. ASCII.Code only carries 0x00...0x7F per
+            // ASCII.Code's `init(_ byte: Byte)` requirement, but for
+            // strings we may see 0x80+ continuation bytes — read the
+            // raw byte and append directly to the UTF-8 scratch.
+            // AUDIT [.underlying]: read raw UInt8 for UTF-8 passthrough.
+            let raw = code.underlying
+            if raw > 0x7F { isASCII = false }
+            scratch.append(raw)
             scanner.advance()
         }
     }
@@ -120,27 +128,28 @@ internal func _lexString(
 internal func _lexEscape(
     scanner: inout Lexer.Scanner
 ) throws(RFC_8259.Error) -> [UInt8] {
-    guard let byte = scanner.peek() else {
+    // Type-up: lift to ASCII.Code at the peek boundary.
+    guard let code: ASCII.Code = scanner.peek() else {
         throw .unexpectedEndOfInput(
             at: _position(at: scanner.position, scanner: scanner),
             expected: .value
         )
     }
     scanner.advance()
-    switch byte {
-    case UInt8.ascii.quotationMark:  return [.ascii.quotationMark]
-    case UInt8.ascii.reverseSlant:   return [.ascii.reverseSlant]
-    case UInt8.ascii.solidus:        return [.ascii.solidus]
-    case UInt8.ascii.b:              return [.ascii.bs]
-    case UInt8.ascii.f:              return [.ascii.ff]
-    case UInt8.ascii.n:              return [.ascii.lf]
-    case UInt8.ascii.r:              return [.ascii.cr]
-    case UInt8.ascii.t:              return [.ascii.htab]
-    case UInt8.ascii.u:              return try _lexUnicodeEscape(scanner: &scanner)
+    switch code {
+    case .quotationMark:  return [.ascii.quotationMark]
+    case .reverseSlant:   return [.ascii.reverseSlant]
+    case .solidus:        return [.ascii.solidus]
+    case .b:              return [.ascii.bs]
+    case .f:              return [.ascii.ff]
+    case .n:              return [.ascii.lf]
+    case .r:              return [.ascii.cr]
+    case .t:              return [.ascii.htab]
+    case .u:              return try _lexUnicodeEscape(scanner: &scanner)
     default:
         throw .invalidString(
             at: _position(at: scanner.position, scanner: scanner),
-            reason: .invalidEscape(byte)
+            reason: .invalidEscape(code)
         )
     }
 }
@@ -149,23 +158,23 @@ internal func _lexEscape(
 internal func _lexUnicodeEscape(
     scanner: inout Lexer.Scanner
 ) throws(RFC_8259.Error) -> [UInt8] {
-    var hex: [UInt8] = []
+    var hex: [ASCII.Code] = []
     hex.reserveCapacity(4)
 
     for _ in 0..<4 {
-        guard let byte = scanner.peek() else {
+        guard let code: ASCII.Code = scanner.peek() else {
             throw .invalidString(
                 at: _position(at: scanner.position, scanner: scanner),
                 reason: .invalidUnicodeEscape
             )
         }
-        guard byte.ascii.isHexDigit else {
+        guard code.isHexDigit else {
             throw .invalidString(
                 at: _position(at: scanner.position, scanner: scanner),
                 reason: .invalidUnicodeEscape
             )
         }
-        hex.append(byte)
+        hex.append(code)
         scanner.advance()
     }
 
@@ -177,14 +186,14 @@ internal func _lexUnicodeEscape(
     }
 
     if codePoint >= 0xD800 && codePoint <= 0xDBFF {
-        guard scanner.peek() == UInt8.ascii.reverseSlant else {
+        guard let rs: ASCII.Code = scanner.peek(), rs == .reverseSlant else {
             throw .invalidString(
                 at: _position(at: scanner.position, scanner: scanner),
                 reason: .invalidUnicodeEscape
             )
         }
         scanner.advance()
-        guard scanner.peek() == UInt8.ascii.u else {
+        guard let u: ASCII.Code = scanner.peek(), u == .u else {
             throw .invalidString(
                 at: _position(at: scanner.position, scanner: scanner),
                 reason: .invalidUnicodeEscape
@@ -192,16 +201,16 @@ internal func _lexUnicodeEscape(
         }
         scanner.advance()
 
-        var lowHex: [UInt8] = []
+        var lowHex: [ASCII.Code] = []
         lowHex.reserveCapacity(4)
         for _ in 0..<4 {
-            guard let byte = scanner.peek(), byte.ascii.isHexDigit else {
+            guard let code: ASCII.Code = scanner.peek(), code.isHexDigit else {
                 throw .invalidString(
                     at: _position(at: scanner.position, scanner: scanner),
                     reason: .invalidUnicodeEscape
                 )
             }
-            lowHex.append(byte)
+            lowHex.append(code)
             scanner.advance()
         }
 
@@ -233,11 +242,11 @@ internal func _lexUnicodeEscape(
 }
 
 @inlinable
-internal func _parseHex(_ bytes: [UInt8]) -> UInt32? {
-    guard bytes.count == 4 else { return nil }
+internal func _parseHex(_ codes: [ASCII.Code]) -> UInt32? {
+    guard codes.count == 4 else { return nil }
     var result: UInt32 = 0
-    for byte in bytes {
-        guard let digit = byte.ascii.hexValue else { return nil }
+    for code in codes {
+        guard let digit = code.hexValue else { return nil }
         result = result * 16 + UInt32(digit)
     }
     return result
@@ -251,63 +260,73 @@ internal func _lexNumber(
     var bytes = Array_Primitives.Array<UInt8>.Small<24>()
 
     // Optional minus.
-    if scanner.peek() == UInt8.ascii.hyphen {
-        bytes.append(scanner.consume())
+    // Type-up: lift to ASCII.Code at the peek boundary.
+    if let b: ASCII.Code = scanner.peek(), b == .hyphen {
+        // AUDIT [.underlying]: numeric-byte accumulation for span-shaped
+        // parsing (Int64/UInt64/Double + Eisel-Lemire span input).
+        bytes.append(scanner.consume().underlying)
     }
 
     // Integer part.
-    guard let firstDigit = scanner.peek(), firstDigit.ascii.isDigit else {
+    guard let firstDigit: ASCII.Code = scanner.peek(), firstDigit.isDigit else {
         throw .invalidNumber(
             at: _position(at: startCursor, scanner: scanner),
             reason: .missingDigits(context: "integer part")
         )
     }
-    if firstDigit == UInt8.ascii.`0` {
-        bytes.append(scanner.consume())
-        if let next = scanner.peek(), next.ascii.isDigit {
+    if firstDigit == .`0` {
+        // AUDIT [.underlying]: numeric-byte accumulation.
+        bytes.append(scanner.consume().underlying)
+        if let next: ASCII.Code = scanner.peek(), next.isDigit {
             throw .invalidNumber(
                 at: _position(at: startCursor, scanner: scanner),
                 reason: .leadingZeros
             )
         }
     } else {
-        while let byte = scanner.peek(), byte.ascii.isDigit {
-            bytes.append(scanner.consume())
+        while let code: ASCII.Code = scanner.peek(), code.isDigit {
+            // AUDIT [.underlying]: numeric-byte accumulation.
+            bytes.append(scanner.consume().underlying)
         }
     }
 
     var isFloat = false
 
     // Optional fraction.
-    if scanner.peek() == UInt8.ascii.period {
+    if let b: ASCII.Code = scanner.peek(), b == .period {
         isFloat = true
-        bytes.append(scanner.consume())
-        guard let firstFracDigit = scanner.peek(), firstFracDigit.ascii.isDigit else {
+        // AUDIT [.underlying]: numeric-byte accumulation.
+        bytes.append(scanner.consume().underlying)
+        guard let firstFracDigit: ASCII.Code = scanner.peek(), firstFracDigit.isDigit else {
             throw .invalidNumber(
                 at: _position(at: startCursor, scanner: scanner),
                 reason: .missingDigits(context: "fraction")
             )
         }
-        while let byte = scanner.peek(), byte.ascii.isDigit {
-            bytes.append(scanner.consume())
+        while let code: ASCII.Code = scanner.peek(), code.isDigit {
+            // AUDIT [.underlying]: numeric-byte accumulation.
+            bytes.append(scanner.consume().underlying)
         }
     }
 
     // Optional exponent.
-    if let e = scanner.peek(), e == UInt8.ascii.e || e == UInt8.ascii.E {
+    if let e: ASCII.Code = scanner.peek(), e == .e || e == .E {
         isFloat = true
-        bytes.append(scanner.consume())
-        if let sign = scanner.peek(), sign == UInt8.ascii.plusSign || sign == UInt8.ascii.hyphen {
-            bytes.append(scanner.consume())
+        // AUDIT [.underlying]: numeric-byte accumulation.
+        bytes.append(scanner.consume().underlying)
+        if let sign: ASCII.Code = scanner.peek(), sign == .plusSign || sign == .hyphen {
+            // AUDIT [.underlying]: numeric-byte accumulation.
+            bytes.append(scanner.consume().underlying)
         }
-        guard let firstExpDigit = scanner.peek(), firstExpDigit.ascii.isDigit else {
+        guard let firstExpDigit: ASCII.Code = scanner.peek(), firstExpDigit.isDigit else {
             throw .invalidNumber(
                 at: _position(at: startCursor, scanner: scanner),
                 reason: .missingDigits(context: "exponent")
             )
         }
-        while let byte = scanner.peek(), byte.ascii.isDigit {
-            bytes.append(scanner.consume())
+        while let code: ASCII.Code = scanner.peek(), code.isDigit {
+            // AUDIT [.underlying]: numeric-byte accumulation.
+            bytes.append(scanner.consume().underlying)
         }
     }
 

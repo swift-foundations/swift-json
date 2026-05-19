@@ -136,44 +136,46 @@ extension JSON.Decode.Implementation {
     internal mutating func parseValue() throws(RFC_8259.Error) -> RFC_8259.Value {
         skipWhitespace()
 
-        guard let byte = scanner.peek() else {
+        // Type-up: lift to ASCII.Code at the peek boundary so cases match
+        // ASCII.Code constants directly (JSON tokens are strict ASCII).
+        guard let code: ASCII.Code = scanner.peek() else {
             throw .unexpectedEndOfInput(at: currentPosition(), expected: .value)
         }
 
-        switch byte {
-        case UInt8.ascii.leftBrace:              // {
+        switch code {
+        case .leftBrace:              // {
             scanner.advance()
             return try parseObject()
 
-        case UInt8.ascii.leftBracket:            // [
+        case .leftBracket:            // [
             scanner.advance()
             return try parseArray()
 
-        case UInt8.ascii.quotationMark:          // "
+        case .quotationMark:          // "
             let s = try lexStringValue()
             return .string(s)
 
-        case UInt8.ascii.n:                      // n (null)
-            try expectLiteral([.ascii.n, .ascii.u, .ascii.l, .ascii.l])
+        case .n:                      // n (null)
+            try expectLiteral([.n, .u, .l, .l])
             return .null
 
-        case UInt8.ascii.t:                      // t (true)
-            try expectLiteral([.ascii.t, .ascii.r, .ascii.u, .ascii.e])
+        case .t:                      // t (true)
+            try expectLiteral([.t, .r, .u, .e])
             return .bool(true)
 
-        case UInt8.ascii.f:                      // f (false)
-            try expectLiteral([.ascii.f, .ascii.a, .ascii.l, .ascii.s, .ascii.e])
+        case .f:                      // f (false)
+            try expectLiteral([.f, .a, .l, .s, .e])
             return .bool(false)
 
-        case UInt8.ascii.hyphen,                 // -
-             UInt8.ascii.`0`...UInt8.ascii.`9`:  // 0-9
+        case .hyphen,                 // -
+             .`0`...ASCII.Code.`9`:   // 0-9
             let n = try lexNumberValue()
             return .number(n)
 
         default:
             throw .unexpectedToken(
                 at: currentPosition(),
-                found: .unknown(byte),
+                found: .unknown(code),
                 expected: .value
             )
         }
@@ -202,7 +204,7 @@ extension JSON.Decode.Implementation {
 
         skipWhitespace()
         // Empty array: `[ ]`.
-        if scanner.peek() == UInt8.ascii.rightBracket {
+        if let code: ASCII.Code = scanner.peek(), code == .rightBracket {
             scanner.advance()
             return .array(RFC_8259.Array(elements))
         }
@@ -213,20 +215,21 @@ extension JSON.Decode.Implementation {
         // Subsequent values.
         while true {
             skipWhitespace()
-            guard let byte = scanner.peek() else {
+            // Type-up: lift to ASCII.Code at the peek boundary.
+            guard let code: ASCII.Code = scanner.peek() else {
                 throw .unexpectedEndOfInput(at: currentPosition(), expected: .arrayEnd)
             }
-            switch byte {
-            case UInt8.ascii.rightBracket:
+            switch code {
+            case .rightBracket:
                 scanner.advance()
                 return .array(RFC_8259.Array(elements))
-            case UInt8.ascii.comma:
+            case .comma:
                 scanner.advance()
                 elements.append(try parseValue())
             default:
                 throw .unexpectedToken(
                     at: currentPosition(),
-                    found: .unknown(byte),
+                    found: .unknown(code),
                     expected: .commaOrEnd
                 )
             }
@@ -250,7 +253,7 @@ extension JSON.Decode.Implementation {
 
         skipWhitespace()
         // Empty object: `{ }`.
-        if scanner.peek() == UInt8.ascii.rightBrace {
+        if let code: ASCII.Code = scanner.peek(), code == .rightBrace {
             scanner.advance()
             return .object(RFC_8259.Object(members))
         }
@@ -261,20 +264,21 @@ extension JSON.Decode.Implementation {
         // Subsequent members.
         while true {
             skipWhitespace()
-            guard let byte = scanner.peek() else {
+            // Type-up: lift to ASCII.Code at the peek boundary.
+            guard let code: ASCII.Code = scanner.peek() else {
                 throw .unexpectedEndOfInput(at: currentPosition(), expected: .objectEnd)
             }
-            switch byte {
-            case UInt8.ascii.rightBrace:
+            switch code {
+            case .rightBrace:
                 scanner.advance()
                 return .object(RFC_8259.Object(members))
-            case UInt8.ascii.comma:
+            case .comma:
                 scanner.advance()
                 members.append(try parseMember())
             default:
                 throw .unexpectedToken(
                     at: currentPosition(),
-                    found: .unknown(byte),
+                    found: .unknown(code),
                     expected: .commaOrEnd
                 )
             }
@@ -286,13 +290,14 @@ extension JSON.Decode.Implementation {
     @_lifetime(self: copy self)
     internal mutating func parseMember() throws(RFC_8259.Error) -> (key: String, value: RFC_8259.Value) {
         skipWhitespace()
-        guard let firstByte = scanner.peek() else {
+        // Type-up: lift to ASCII.Code at the peek boundary.
+        guard let firstCode: ASCII.Code = scanner.peek() else {
             throw .unexpectedEndOfInput(at: currentPosition(), expected: .objectKey)
         }
-        guard firstByte == UInt8.ascii.quotationMark else {
+        guard firstCode == .quotationMark else {
             throw .unexpectedToken(
                 at: currentPosition(),
-                found: .unknown(firstByte),
+                found: .unknown(firstCode),
                 expected: .objectKey
             )
         }
@@ -300,13 +305,13 @@ extension JSON.Decode.Implementation {
 
         // Expect colon.
         skipWhitespace()
-        guard let colonByte = scanner.peek() else {
+        guard let colonCode: ASCII.Code = scanner.peek() else {
             throw .unexpectedEndOfInput(at: currentPosition(), expected: .colon)
         }
-        guard colonByte == UInt8.ascii.colon else {
+        guard colonCode == .colon else {
             throw .unexpectedToken(
                 at: currentPosition(),
-                found: .unknown(colonByte),
+                found: .unknown(colonCode),
                 expected: .colon
             )
         }
@@ -370,19 +375,20 @@ extension JSON.Decode.Implementation {
     /// than the failing byte.
     @inlinable
     @_lifetime(self: copy self)
-    internal mutating func expectLiteral(_ expected: [UInt8]) throws(RFC_8259.Error) {
+    internal mutating func expectLiteral(_ expected: [ASCII.Code]) throws(RFC_8259.Error) {
         let startCursor = scanner.position
-        for expectedByte in expected {
-            guard let byte = scanner.peek() else {
+        for expectedCode in expected {
+            // Type-up: lift to ASCII.Code at the peek boundary.
+            guard let code: ASCII.Code = scanner.peek() else {
                 throw .unexpectedEndOfInput(
                     at: currentPosition(),
                     expected: .value
                 )
             }
-            guard byte == expectedByte else {
+            guard code == expectedCode else {
                 throw .unexpectedToken(
                     at: position(at: startCursor),
-                    found: .unknown(byte),
+                    found: .unknown(code),
                     expected: .value
                 )
             }
@@ -411,9 +417,11 @@ extension JSON.Decode.Implementation {
         stringScratch.removeAll(keepingCapacity: true)
         var isASCII = true
 
-        while let byte = scanner.peek() {
-            switch byte {
-            case UInt8.ascii.quotationMark:      // " - closing quote
+        // Type-up: lift to ASCII.Code at the peek boundary so cases match
+        // ASCII.Code constants directly.
+        while let code: ASCII.Code = scanner.peek() {
+            switch code {
+            case .quotationMark:                 // " - closing quote
                 scanner.advance()
                 if isASCII {
                     let count = stringScratch.count
@@ -429,7 +437,7 @@ extension JSON.Decode.Implementation {
                 }
                 return String(decoding: stringScratch, as: UTF8.self)
 
-            case UInt8.ascii.reverseSlant:       // \ - escape sequence
+            case .reverseSlant:                  // \ - escape sequence
                 scanner.advance()
                 let escapeBytes = try lexEscapeSequence()
                 for b in escapeBytes {
@@ -437,12 +445,17 @@ extension JSON.Decode.Implementation {
                     stringScratch.append(b)
                 }
 
-            case 0x00...0x1F:                    // Control characters (C0 range)
-                throw .invalidString(at: currentPosition(), reason: .controlCharacter(byte))
+            case .nul...ASCII.Code.us:           // Control characters (C0 range, 0x00...0x1F)
+                throw .invalidString(at: currentPosition(), reason: .controlCharacter(code))
 
             default:
-                if byte > 0x7F { isASCII = false }
-                stringScratch.append(byte)
+                // Non-control byte. ASCII.Code carries the raw value;
+                // for strings we may see 0x80+ UTF-8 continuation bytes
+                // — read the raw byte and append to the UTF-8 scratch.
+                // AUDIT [.underlying]: read raw UInt8 for UTF-8 passthrough.
+                let raw = code.underlying
+                if raw > 0x7F { isASCII = false }
+                stringScratch.append(raw)
                 scanner.advance()
             }
         }
@@ -458,24 +471,25 @@ extension JSON.Decode.Implementation {
     @inlinable
     @_lifetime(self: copy self)
     internal mutating func lexEscapeSequence() throws(RFC_8259.Error) -> [UInt8] {
-        guard let byte = scanner.peek() else {
+        // Type-up: lift to ASCII.Code at the peek boundary.
+        guard let code: ASCII.Code = scanner.peek() else {
             throw .unexpectedEndOfInput(at: currentPosition(), expected: .value)
         }
 
         scanner.advance()
 
-        switch byte {
-        case UInt8.ascii.quotationMark:  return [.ascii.quotationMark]   // \"
-        case UInt8.ascii.reverseSlant:   return [.ascii.reverseSlant]    // \\
-        case UInt8.ascii.solidus:        return [.ascii.solidus]         // \/
-        case UInt8.ascii.b:              return [.ascii.bs]              // \b
-        case UInt8.ascii.f:              return [.ascii.ff]              // \f
-        case UInt8.ascii.n:              return [.ascii.lf]              // \n
-        case UInt8.ascii.r:              return [.ascii.cr]              // \r
-        case UInt8.ascii.t:              return [.ascii.htab]            // \t
-        case UInt8.ascii.u:              return try lexUnicodeEscape()   // \uXXXX
+        switch code {
+        case .quotationMark:  return [.ascii.quotationMark]   // \"
+        case .reverseSlant:   return [.ascii.reverseSlant]    // \\
+        case .solidus:        return [.ascii.solidus]         // \/
+        case .b:              return [.ascii.bs]              // \b
+        case .f:              return [.ascii.ff]              // \f
+        case .n:              return [.ascii.lf]              // \n
+        case .r:              return [.ascii.cr]              // \r
+        case .t:              return [.ascii.htab]            // \t
+        case .u:              return try lexUnicodeEscape()   // \uXXXX
         default:
-            throw .invalidString(at: currentPosition(), reason: .invalidEscape(byte))
+            throw .invalidString(at: currentPosition(), reason: .invalidEscape(code))
         }
     }
 
@@ -483,17 +497,17 @@ extension JSON.Decode.Implementation {
     @inlinable
     @_lifetime(self: copy self)
     internal mutating func lexUnicodeEscape() throws(RFC_8259.Error) -> [UInt8] {
-        var hex: [UInt8] = []
+        var hex: [ASCII.Code] = []
         hex.reserveCapacity(4)
 
         for _ in 0..<4 {
-            guard let byte = scanner.peek() else {
+            guard let code: ASCII.Code = scanner.peek() else {
                 throw .invalidString(at: currentPosition(), reason: .invalidUnicodeEscape)
             }
-            guard byte.ascii.isHexDigit else {
+            guard code.isHexDigit else {
                 throw .invalidString(at: currentPosition(), reason: .invalidUnicodeEscape)
             }
-            hex.append(byte)
+            hex.append(code)
             scanner.advance()
         }
 
@@ -503,22 +517,22 @@ extension JSON.Decode.Implementation {
 
         // Handle surrogate pairs.
         if codePoint >= 0xD800 && codePoint <= 0xDBFF {
-            guard scanner.peek() == UInt8.ascii.reverseSlant else {
+            guard let rs: ASCII.Code = scanner.peek(), rs == .reverseSlant else {
                 throw .invalidString(at: currentPosition(), reason: .invalidUnicodeEscape)
             }
             scanner.advance()
-            guard scanner.peek() == UInt8.ascii.u else {
+            guard let u: ASCII.Code = scanner.peek(), u == .u else {
                 throw .invalidString(at: currentPosition(), reason: .invalidUnicodeEscape)
             }
             scanner.advance()
 
-            var lowHex: [UInt8] = []
+            var lowHex: [ASCII.Code] = []
             lowHex.reserveCapacity(4)
             for _ in 0..<4 {
-                guard let byte = scanner.peek(), byte.ascii.isHexDigit else {
+                guard let code: ASCII.Code = scanner.peek(), code.isHexDigit else {
                     throw .invalidString(at: currentPosition(), reason: .invalidUnicodeEscape)
                 }
-                lowHex.append(byte)
+                lowHex.append(code)
                 scanner.advance()
             }
 
@@ -540,13 +554,13 @@ extension JSON.Decode.Implementation {
         return Swift.Array(String(scalar).utf8)
     }
 
-    /// Parses 4 hex bytes to a UInt32.
+    /// Parses 4 hex codes to a UInt32.
     @inlinable
-    internal func parseHex(_ bytes: [UInt8]) -> UInt32? {
-        guard bytes.count == 4 else { return nil }
+    internal func parseHex(_ codes: [ASCII.Code]) -> UInt32? {
+        guard codes.count == 4 else { return nil }
         var result: UInt32 = 0
-        for byte in bytes {
-            guard let digit = byte.ascii.hexValue else { return nil }
+        for code in codes {
+            guard let digit = code.hexValue else { return nil }
             result = result * 16 + UInt32(digit)
         }
         return result
@@ -566,70 +580,80 @@ extension JSON.Decode.Implementation {
         var bytes = Array_Primitives.Array<UInt8>.Small<24>()
 
         // Optional minus
-        if scanner.peek() == UInt8.ascii.hyphen {
-            bytes.append(scanner.consume())
+        // Type-up: lift to ASCII.Code at the peek boundary.
+        if let b: ASCII.Code = scanner.peek(), b == .hyphen {
+            // AUDIT [.underlying]: numeric-byte accumulation for span-shaped
+            // parsing (Int64/UInt64/Double + Eisel-Lemire span input).
+            bytes.append(scanner.consume().underlying)
         }
 
         // Integer part
-        guard let firstDigit = scanner.peek(), firstDigit.ascii.isDigit else {
+        guard let firstDigit: ASCII.Code = scanner.peek(), firstDigit.isDigit else {
             throw .invalidNumber(
                 at: position(at: startCursor),
                 reason: .missingDigits(context: "integer part")
             )
         }
 
-        if firstDigit == UInt8.ascii.`0` { // Leading zero
-            bytes.append(scanner.consume())
+        if firstDigit == .`0` { // Leading zero
+            // AUDIT [.underlying]: numeric-byte accumulation.
+            bytes.append(scanner.consume().underlying)
 
-            if let next = scanner.peek(), next.ascii.isDigit {
+            if let next: ASCII.Code = scanner.peek(), next.isDigit {
                 throw .invalidNumber(
                     at: position(at: startCursor),
                     reason: .leadingZeros
                 )
             }
         } else {
-            while let byte = scanner.peek(), byte.ascii.isDigit {
-                bytes.append(scanner.consume())
+            while let code: ASCII.Code = scanner.peek(), code.isDigit {
+                // AUDIT [.underlying]: numeric-byte accumulation.
+                bytes.append(scanner.consume().underlying)
             }
         }
 
         var isFloat = false
 
         // Optional fraction
-        if scanner.peek() == UInt8.ascii.period {
+        if let b: ASCII.Code = scanner.peek(), b == .period {
             isFloat = true
-            bytes.append(scanner.consume())
+            // AUDIT [.underlying]: numeric-byte accumulation.
+            bytes.append(scanner.consume().underlying)
 
-            guard let firstFracDigit = scanner.peek(), firstFracDigit.ascii.isDigit else {
+            guard let firstFracDigit: ASCII.Code = scanner.peek(), firstFracDigit.isDigit else {
                 throw .invalidNumber(
                     at: position(at: startCursor),
                     reason: .missingDigits(context: "fraction")
                 )
             }
 
-            while let byte = scanner.peek(), byte.ascii.isDigit {
-                bytes.append(scanner.consume())
+            while let code: ASCII.Code = scanner.peek(), code.isDigit {
+                // AUDIT [.underlying]: numeric-byte accumulation.
+                bytes.append(scanner.consume().underlying)
             }
         }
 
         // Optional exponent
-        if let e = scanner.peek(), e == UInt8.ascii.e || e == UInt8.ascii.E {
+        if let e: ASCII.Code = scanner.peek(), e == .e || e == .E {
             isFloat = true
-            bytes.append(scanner.consume())
+            // AUDIT [.underlying]: numeric-byte accumulation.
+            bytes.append(scanner.consume().underlying)
 
-            if let sign = scanner.peek(), sign == UInt8.ascii.plusSign || sign == UInt8.ascii.hyphen {
-                bytes.append(scanner.consume())
+            if let sign: ASCII.Code = scanner.peek(), sign == .plusSign || sign == .hyphen {
+                // AUDIT [.underlying]: numeric-byte accumulation.
+                bytes.append(scanner.consume().underlying)
             }
 
-            guard let firstExpDigit = scanner.peek(), firstExpDigit.ascii.isDigit else {
+            guard let firstExpDigit: ASCII.Code = scanner.peek(), firstExpDigit.isDigit else {
                 throw .invalidNumber(
                     at: position(at: startCursor),
                     reason: .missingDigits(context: "exponent")
                 )
             }
 
-            while let byte = scanner.peek(), byte.ascii.isDigit {
-                bytes.append(scanner.consume())
+            while let code: ASCII.Code = scanner.peek(), code.isDigit {
+                // AUDIT [.underlying]: numeric-byte accumulation.
+                bytes.append(scanner.consume().underlying)
             }
         }
 
