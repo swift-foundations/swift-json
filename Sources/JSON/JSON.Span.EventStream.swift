@@ -97,7 +97,7 @@ extension JSON.Span.EventStream {
     @inlinable
     @_lifetime(self: copy self)
     public mutating func peekStructural() -> UInt8? {
-        inner.peek()
+        inner.peek().map(\.underlying)
     }
 }
 

@@ -449,7 +449,7 @@ struct Tests {
             } catch let error as RFC_8259.Error {
                 if case .unexpectedToken(_, let found, _) = error {
                     if case .unknown(let byte) = found {
-                        #expect(byte == UInt8(ascii: "@"))
+                        #expect(byte == ASCII.Code(UInt8(ascii: "@")))
                     } else {
                         Issue.record("Wrong kind: \(found)")
                     }
