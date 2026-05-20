@@ -15,9 +15,11 @@
 /// Stdlib types (Int, String, Optional, Array, Dictionary, ...) do
 /// not have a single inherent canonical codec — their representation
 /// is format-specific. So they conform to FORMAT-SPECIFIC sibling
-/// protocols like `JSON.Serializable`, `Binary.LittleEndian.Codable`
-/// (future), etc., rather than to the generic `Codable`. This mirrors
-/// the parser-side pattern where `Int: ASCII.Parseable` lives in
+/// protocols like `JSON.Serializable`, `Binary.Serializable` +
+/// `Binary.Parseable` (the split-pair per [FAM-005]; the legacy
+/// `Binary.LittleEndian.Codable` framing has been replaced), etc.,
+/// rather than to the generic `Codable`. This mirrors the parser-side
+/// pattern where `Int: ASCII.Parseable` lives in
 /// swift-ascii-parser-primitives (format-specific) rather than as a
 /// generic `Int: Parseable`.
 ///
@@ -59,8 +61,9 @@ extension JSON {
     /// representation is format-specific (most stdlib types, most
     /// user-defined types) conform to JSON.Serializable but typically
     /// NOT to the generic Codable — they may additionally conform to
-    /// sibling protocols for other formats (Binary.LittleEndian.Codable
-    /// future, MessagePack.Codable future, etc.).
+    /// sibling protocols for other formats (`Binary.Serializable` +
+    /// `Binary.Parseable` per [FAM-005], `MessagePack.Serializable`
+    /// future, etc.).
     ///
     /// ## Example
     ///
