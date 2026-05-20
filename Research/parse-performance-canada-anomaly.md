@@ -2,9 +2,9 @@
 
 <!--
 ---
-version: 1.2.0
+version: 1.3.0
 last_updated: 2026-05-20
-status: VALIDATED (per-call microbench 2026-05-20 confirms v1.1.0 tree-shape claim)
+status: SUPERSEDED-BY-EVIDENCE (tree-microbench 2026-05-20 shows tree-emit accounts for only ~4% of cost; lex layer dominates)
 tier: 1
 ---
 -->
@@ -944,6 +944,234 @@ the microbench shows the actual contribution is ~2.6 ms.
   in this section traces to a `parse-performance-bench` invocation
   recorded in the commit landing alongside.
 
+---
+
+## v1.3.0 — Tree Decomposition (2026-05-20)
+
+Date: 2026-05-20 (same-day follow-on to v1.2.0). Tree-microbench
+decomposes the residual ~233 ms canada tree-emit cost into per-Value
+allocation, array growth, and tree teardown. **Reframes v1.1.0/v1.2.0's
+"tree-shape dominates" claim: tree-emit components account for only
+~4% of canada parse cost; ~96% is in something else (most likely the
+lex layer).**
+
+### Verdict: SUPERSEDED-BY-EVIDENCE
+
+v1.1.0's hypothesis "the residual ~230 ms is `RFC_8259.Value` enum
+allocation + tree teardown + intermediate array doublings"
+(CONFIRMED-BY-ELIMINATION in v1.2.0) is now **partially refuted by
+direct measurement**: those three components total ~9.73 ms, NOT
+~233 ms. The "tree-shape dominates" framing was directionally right
+on what *isn't* the bottleneck (float parsing — confirmed at ~1%)
+but wrong on *what is*.
+
+### Methodology
+
+Extended `parse-performance-bench` (commit alongside this section)
+with a `tree-microbench` mode running three sub-measurements at
+16 warmup + N=256 measured iters under `caffeinate -i` +
+`swift run -c release`:
+
+- **alloc** — Construct `RFC_8259.Value.number(Number(value, original))`
+  in a tight loop using canada's actual Number tokens (harvested via
+  the float-microbench's token scanner) at fixed `value = 0.0` to
+  factor out float-parse cost. Pure enum-init + `RFC_8259.Number`
+  + `RFC_8259.Number.Original` construction cost in isolation.
+- **grow** — Allocate fresh `[RFC_8259.Value]` arrays at canada's
+  actual size distribution (harvested via a one-time
+  `JSON.Decode.parse` walk over the live tree) and time the appends.
+  Uses production `reserveCapacity(4)` heuristic at array creation.
+- **teardown** — Parse canada once per iter to build the tree (cost
+  outside the timing window), then time `tree = .null` reassignment
+  which fires the recursive `outlined destroy of RFC_8259.Value`.
+
+Workload counts (live measurement at startup):
+
+- Number tokens: 111 126 (matches v1.0.0's regex-scan count exactly)
+- Array nodes: 56 045
+- Total appends across all arrays: 167 170
+- Mean array size: 2.98 elements
+
+Top size-distribution: 1 element (1 array), 2 elements (55 563
+arrays — the canonical `[lon, lat]` coordinate pair), 9–14 elements
+(~45 arrays at outer-coordinate-ring sizes).
+
+### Results
+
+| Statistic | ALLOC (ms) | GROW (ms) | TEARDOWN (ms) |
+|---|---:|---:|---:|
+| min     |  5.418 |  2.911 |  1.403 |
+| median  |  5.513 |  2.962 |  1.510 |
+| p90     |  5.784 |  3.028 |  1.597 |
+| mean    |  5.590 |  2.970 |  1.531 |
+
+Per-operation (min):
+
+- ALLOC: 48.76 ns/Value (~111 126 Values)
+- GROW: 17.41 ns/append (~167 170 appends)
+- TEARDOWN: not per-op; the recursive destroy walks the full tree.
+
+### Reference parse cost
+
+For comparison (same machine, same conditions, same input):
+
+| Statistic | Full JSON.parse([Byte]) (ms) |
+|---|---:|
+| min     | 234.199 |
+| median  | 236.593 |
+| p90     | 243.821 |
+| mean    | 241.109 |
+
+### Decomposition
+
+Per-iter MIN (ms):
+
+| Component | Cost | % of parse |
+|---|---:|---:|
+| alloc    |   5.42 |   2.3% |
+| grow     |   2.91 |   1.2% |
+| teardown |   1.40 |   0.6% |
+| **sum**  |   **9.73** |   **4.2%** |
+| **residual** | **224.47** | **95.8%** |
+| parse min | 234.20 | (reference) |
+
+The bench's automatic sanity check flagged the missing-component
+blind spot: components sum to <50% of parse cost. The remaining
+~224 ms must be in components NOT measured by the tree-microbench:
+
+1. **Lexer scanner advancement** — `scanner.consume()` /
+   `scanner.peek()` / position tracking / `Text.Location.Tracker`
+   updates over 2.15 MB. Even at ~100 ns/byte this alone is
+   ~215 ms — plausible dominant cost.
+2. **skipWhitespace** — runs between every token; touches every
+   whitespace byte.
+3. **Token dispatch in `parseValue`** — `scanner.peek() as ASCII.Code`
+   + switch over 6 cases per Value node (~333 K Value nodes).
+4. **String tokenization** — lex of object keys and string values.
+   Canada has ~5 distinct string keys repeated across nodes, plus a
+   handful of literal string values; small absolute cost but per-key
+   work scales with key count.
+
+ALLOC's per-Value cost (48.76 ns) is *isolated*; in the production
+path each Number allocation is preceded by ~18 bytes of scanner
+work in `lexNumberValue` (peek + consume per digit/sign char,
+position-tracker updates, isFloat flag tracking). The production
+ratio between "alloc cost" and "scanner-around-alloc cost" is the
+gap this decomposition surfaces.
+
+### Adjudication
+
+The previous Path A / Path B framing was:
+
+- Path A (arena allocation): would close alloc cost.
+- Path B (~Copyable Value cascade): would close teardown cost.
+- Targeted array-growth fix: would close grow cost.
+- Event-grain `JSON.Span.EventStream`: bypasses the tree.
+
+The tree-microbench shows the three tree-emit components total
+9.73 ms. Theoretical ceilings:
+
+| Approach | Closes (ms) | % of parse | Worth it? |
+|---|---:|---:|---|
+| Path A (arena alloc) | ≤ 5.42 | ≤ 2.3% | Marginal at this workload |
+| Path B (~Copyable Value) | ≤ 1.40 (teardown) + secondary | ≤ 1–2% | Not justified for canada |
+| Array reserve heuristic | ≤ 2.91 | ≤ 1.2% | Trivial |
+| **LEX-layer rework** | **≤ 224.47** | **≤ 95.8%** | **Where the cost lives** |
+| Event-grain (typed-struct consumers only) | bypasses ≥ 9.73 ms tree work | depends on consumer | Right tool for typed decode; doesn't help bytes→Value consumers |
+
+The next architectural lever for closing the canada anomaly is
+**LEX-layer rework**, not arena allocation. Path A's L1 prerequisite
+is shipped and remains correctness-positive for other workloads
+(notably the string-heavy symbol-graph case, where allocation share
+may be larger), but on canada specifically it is structurally bounded
+to a small share.
+
+### What "LEX-layer rework" would look like
+
+Investigation candidates for a follow-on arc:
+
+1. **Lazier position tracking.** Per the architecture doc, Tier 4
+   already deferred line/column rebuild to error-time. Re-measure
+   what's left: byte-offset tracking, scanner.position storage,
+   `Text.Position` arithmetic per advance. SWAR (SIMD-within-a-register)
+   whitespace skipping is a candidate; `RawSpan` cursor with bulk
+   loads is another.
+2. **Direct dispatch on the leading byte.** `parseValue`'s
+   `peek() as ASCII.Code` lifts UInt8 to ASCII.Code before the
+   switch. The lift might be amortizable; profile vs lifting once
+   per parse vs lifting per token.
+3. **`Lexer.Scanner` overhead audit.** The migration to `Span<Byte>`
+   at the Scanner boundary landed in lexer-primitives `34a2f8b`
+   (today). Need to confirm the post-migration scanner is at the
+   per-byte floor on canada-class workloads. Symbol-graph's 1.02×
+   Foundation parity (from `parse-performance.md` v1.2.0) shows the
+   scanner is fine on string-heavy workloads. Canada's number-heavy
+   workload may stress a different scanner-state path.
+4. **`@inlinable` budget audit.** The current parser is heavily
+   `@inlinable`; re-verify the inlining actually fires at consumer
+   call sites under Swift 6.3.1 (canonical `swift build -c release`).
+
+These are research candidates, not patches. The right next step is a
+**lex-microbench** following the same shape as float-microbench and
+tree-microbench: decompose the ~224 ms residual into per-byte cost
+(scanner-only on canada bytes) + per-token cost (peek + dispatch over
+333K Values) + per-Number-tokenization cost (lexNumberValue's
+peek-loop overhead beyond what the EL parser itself does).
+
+### Hypothesis disposition (final, replaces v1.2.0's)
+
+- **v1.1.0 hypothesis "the residual ~230 ms is `RFC_8259.Value` enum
+  allocation + tree teardown + intermediate array doublings":
+  EMPIRICALLY REFUTED.** Direct measurement bounds tree-emit
+  components at ~9.73 ms (~4% of parse). The remaining ~95.8% is
+  structurally elsewhere — almost certainly the lex layer.
+- **v1.0.0 hypothesis "Double.init(_: String) IS the dominant
+  cost": refuted (v1.2.0). Stands.**
+- **EL parser itself is healthy.** Stands (v1.2.0).
+- **NEW: lex layer dominates canada parse cost.** Per-byte scanner
+  overhead × 2.15 MB plus per-token dispatch overhead × 333K Values
+  most plausibly accounts for the ~224 ms residual. Needs direct
+  measurement (lex-microbench) to confirm and decompose further.
+- **Path A (arena allocation) is not the right lever for canada.**
+  Theoretical ceiling ~2.3% of parse cost. L1 primitive remains
+  correctness-positive and may help string-heavy workloads where
+  alloc share is larger; on canada specifically the ROI is small.
+
+### Out of scope (preserved from v1.2.0; updated)
+
+- Tree-shape redesigns (arena, ~Copyable cascade, event-grain) —
+  separate research arcs. **Note**: deprioritized for canada
+  specifically; may revisit for other workload regimes.
+- Verification on `twitter.json` and `citm_catalog.json` — the
+  microbench harness is workload-parametric; future arcs can run
+  the same modes on those payloads to cross-validate the
+  decomposition across workload classes.
+- SIMD float parsing — bounded by the same ≤2.6 ms ceiling on
+  canada; not a high-value pursuit.
+- **NEW**: SIMD whitespace skipping — could be material on canada
+  if the lex-microbench shows whitespace-traversal dominates. Defer
+  to that measurement.
+
+### Skill references (v1.3.0 additions)
+
+- [BENCH-005] — methodology preserved end-to-end across float-microbench
+  and tree-microbench.
+- [BENCH-011] — wrapper refcount cost model: the ALLOC bench's
+  ~48.76 ns/Value figure includes the Copyable enum's runtime
+  case-discriminator construction. Production cost likely matches
+  within ~2× (production has scanner overhead surrounding each
+  alloc; isolated bench has none).
+- [HANDOFF-016] (premise staleness) — v1.1.0's "tree-shape
+  dominates" premise reframed by v1.3.0 measurement. v1.1.0
+  preserved as historical record; v1.3.0 is the current best
+  framing.
+- [HANDOFF-047] (writer-side primary-source sampling) — every
+  per-component number in this section traces to a tree-microbench
+  invocation captured in the commit landing alongside.
+- [RES-018] — correctness-and-evergreen judgment carries the L1
+  byte cascade (swift-byte-primitives' Byte type, Buffer.Arena
+  conditional Copyable) regardless of canada-specific ROI.
+
 ## Provenance
 
 Investigation invoked via /research-process on the
@@ -988,3 +1216,32 @@ No production `Sources/JSON/` edits this session — scope was
 read-only on the live parser surface. Verdict (VALIDATED) updates
 the v1.1.0 RECOMMENDATION status to v1.2.0 VALIDATED and bumps the
 `Research/_index.json` entry.
+
+### v1.3.0 addendum (2026-05-20, same-day follow-on)
+
+Tree-microbench mode added to `parse-performance-bench` decomposes
+the canada tree-emit cost into three components: per-`RFC_8259.Value`
+allocation, intermediate array growth, and recursive tree teardown.
+Companion to `float-microbench`; same MIN-of-N + warmup methodology.
+
+W2 byte-cascade migration of swift-json + swift-rfc-8259 +
+`ASCII.Decimal.Float.Parser` landed concurrently:
+public-API surfaces (`JSON.parse`, `JSON.Decode.parse`,
+`JSON.Span.EventStream`, `JSON.Coder.Input`, `JSON.Serializable.from(...)`,
+`RFC_8259.Number.Original`, `ASCII.Decimal.Float.parse`) now accept
+`Byte` / `Span<Byte>` / `Collection<Byte>` natively rather than
+`UInt8` / `Span<UInt8>` / `Collection<UInt8>`. Internal storage
+fields are likewise `Byte`-typed. Removes the `.underlying` ceremony
+at every callsite within the parser; only legitimate uses remain
+(stdlib boundaries where `String.init(unsafeUninitializedCapacity:)`
+or `String(decoding:as:)` require UInt8).
+
+Path A's L1 prerequisite (`Buffer.Arena: Copyable where Element: Copyable`,
+`Tree.N: Copyable where Element: Copyable`) is also confirmed
+implemented in production (per parallel sub-agent finding 2026-05-20;
+`swift-institute/Research/buffer-arena-conditional-copyable.md` v1.2.0
+IMPLEMENTED). The L1 primitive prerequisite for arena-backed tree
+storage is satisfied.
+
+The decomposition outcome reframes the next-arc priority — see
+"v1.3.0 — Tree Decomposition" section.
