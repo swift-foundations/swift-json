@@ -4,9 +4,12 @@
 /// The canonical bidirectional codec for RFC 8259 JSON.
 ///
 /// Implements ``Coder_Primitives/Coder/Protocol`` for `RFC_8259.Value`:
-/// decode parses a `Swift.Span<UInt8>` to a value via the wholesale
-/// Span parser; encode serialises a value into a `[UInt8]` buffer via
-/// the JSON encoder.
+/// `parse` consumes a `Swift.Span<UInt8>` via the wholesale Span
+/// parser; `serialize` appends bytes to a `[UInt8]` buffer via the
+/// JSON encoder. Per [FAM-006], `Coder.Protocol` refines
+/// `Parser.Protocol + Serializer.Protocol`; this conformance picks up
+/// the inherited `Input` / `Buffer` / `Output` / `Failure` typealiases
+/// via same-name unification.
 ///
 /// Per the swift-coder-primitives framing memo
 /// (`project_parser_serializer_coder_system_framing`), Coder is a
@@ -26,6 +29,7 @@
 /// ```
 
 public import Coder_Primitives
+public import Either_Primitives
 public import RFC_8259
 
 extension JSON {
@@ -33,18 +37,17 @@ extension JSON {
     ///
     /// Conforms to ``Coder_Primitives/Coder/Protocol`` with:
     ///
-    /// - `DecodeInput` = `Swift.Span<UInt8>` (contiguous bytes; the
+    /// - `Input`   = `Swift.Span<UInt8>` (contiguous bytes; the
     ///   public API at swift-json materialises arbitrary inputs to
     ///   contiguous storage before constructing the span).
-    /// - `EncodeBuffer` = `[UInt8]`.
-    /// - `Output` = ``RFC_8259/Value``.
-    /// - `DecodeFailure` = ``RFC_8259/Error``.
-    /// - `EncodeFailure` = ``JSON/Encode/Error`` (depth overflow is
-    ///   surfaced as a typed error via the Coder.Protocol path; the
-    ///   non-throwing convenience entry points
-    ///   (``JSON/Encode/encode(_:options:)`` and
+    /// - `Buffer`  = `[UInt8]`.
+    /// - `Output`  = ``RFC_8259/Value``.
+    /// - `Failure` = `Either<RFC_8259.Error, JSON.Encode.Error>`. Decode
+    ///   surfaces ``RFC_8259/Error`` as `.left`; encode surfaces
+    ///   ``JSON/Encode/Error`` as `.right`. The non-throwing convenience
+    ///   entry points (``JSON/Encode/encode(_:options:)`` and
     ///   ``JSON/Encode/encode(_:into:options:)``) preserve their
-    ///   non-throwing contract via `try!`).
+    ///   non-throwing contract via `try!`.
     public struct Coder: Sendable {
         /// Maximum nesting depth (default 512).
         public let maxDepth: Int
@@ -66,24 +69,31 @@ extension JSON {
 // MARK: - Coder.Protocol conformance
 
 extension JSON.Coder: Coder_Primitives.Coder.`Protocol` {
-    public typealias DecodeInput = Swift.Span<UInt8>
-    public typealias EncodeBuffer = [UInt8]
-    public typealias Output = RFC_8259.Value
-    public typealias DecodeFailure = RFC_8259.Error
-    public typealias EncodeFailure = JSON.Encode.Error
+    public typealias Input   = Swift.Span<UInt8>
+    public typealias Buffer  = [UInt8]
+    public typealias Output  = RFC_8259.Value
+    public typealias Failure = Either<RFC_8259.Error, JSON.Encode.Error>
 
-    /// Decodes a JSON value from a contiguous byte span.
+    /// Parses a JSON value from a contiguous byte span.
     ///
     /// The wholesale Span parser consumes the entire input
     /// (trailing-content check per RFC 8259 §2). On success,
     /// `input` is advanced to an empty span at the end (entire
     /// input was consumed), honoring the
     /// ``Coder_Primitives/Coder/Protocol`` inout-advance contract.
+    ///
+    /// Decode-side faults surface as `.left(RFC_8259.Error)` in
+    /// the unified `Failure` type.
     @inlinable
-    public func decode(
+    public func parse(
         _ input: inout Swift.Span<UInt8>
-    ) throws(RFC_8259.Error) -> RFC_8259.Value {
-        let value = try JSON.Decode.Implementation.parse(input, maxDepth: maxDepth)
+    ) throws(Failure) -> RFC_8259.Value {
+        let value: RFC_8259.Value
+        do {
+            value = try JSON.Decode.Implementation.parse(input, maxDepth: maxDepth)
+        } catch {
+            throw .left(error)
+        }
         // Advance input to an empty span at the end: the wholesale
         // parser consumed the entire input on success (per RFC 8259
         // §2 trailing-content check).
@@ -91,23 +101,37 @@ extension JSON.Coder: Coder_Primitives.Coder.`Protocol` {
         return value
     }
 
-    /// Encodes a JSON value by appending to a UTF-8 byte buffer.
+    /// Serializes a JSON value by appending to a UTF-8 byte buffer.
     ///
-    /// Throws ``JSON/Encode/Error/depthExceeded(maxDepth:)`` when
-    /// nesting exceeds ``JSON/Encode/Options/maxDepth``.
+    /// Throws ``JSON/Encode/Error/depthExceeded(maxDepth:)`` (surfaced
+    /// as `.right(JSON.Encode.Error)` in the unified `Failure` type)
+    /// when nesting exceeds ``JSON/Encode/Options/maxDepth``.
     @inlinable
-    public func encode(
+    public func serialize(
         _ output: RFC_8259.Value,
         into buffer: inout [UInt8]
-    ) throws(JSON.Encode.Error) {
+    ) throws(Failure) {
         var encoder = JSON.Encode.Encoder(options: encodeOptions)
-        try encoder.encode(output, into: &buffer)
+        do {
+            try encoder.encode(output, into: &buffer)
+        } catch {
+            throw .right(error)
+        }
     }
 }
 
 // MARK: - Codable attachment on RFC_8259.Value
 
 extension RFC_8259.Value: @retroactive Coder_Primitives.Codable {
+    /// CANONICAL-ATTACHMENT JUSTIFICATION [FAM-003]:
+    /// `RFC_8259.Value` has exactly one inherent canonical codec — JSON.
+    /// The associatedtype commitment to `JSON.Coder` is structurally
+    /// correct because `RFC_8259.Value` cannot meaningfully be encoded
+    /// as anything other than its JSON representation; it IS the JSON
+    /// tree value type. Format-specific siblings (`JSON.Serializable`,
+    /// `Binary.Serializable`, etc.) are reserved for types whose
+    /// representation is format-dependent and have no single inherent
+    /// canonical codec.
     public typealias Coder = JSON.Coder
 
     /// The canonical bidirectional codec for `RFC_8259.Value`.

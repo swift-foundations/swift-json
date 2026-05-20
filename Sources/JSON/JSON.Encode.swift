@@ -23,7 +23,8 @@
 ///
 /// ```swift
 /// let coder = JSON.Coder(encodeOptions: JSON.Encode.Options(prettyPrint: true))
-/// let bytes = try coder.encode(value)
+/// var bytes: [UInt8] = []
+/// try coder.serialize(value, into: &bytes)
 /// ```
 
 public import RFC_8259

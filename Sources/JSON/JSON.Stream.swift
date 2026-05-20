@@ -10,7 +10,8 @@
 /// ## Streaming Architecture
 ///
 /// JSON parsing requires some lookahead (e.g., distinguishing `{` from `[`),
-/// which means it cannot operate on pure `Parsing.Input.Streaming` sources.
+/// which means it cannot operate on pure
+/// `Parsing.Input_Primitives.Input.Streaming` sources.
 /// However, the async streaming APIs in this module work with `AsyncSequence`
 /// and buffer minimally:
 ///

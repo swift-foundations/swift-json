@@ -20,6 +20,7 @@ let package = Package(
         .package(path: "../../swift-primitives/swift-array-primitives"),
         .package(path: "../../swift-primitives/swift-ascii-parser-primitives"),
         .package(path: "../../swift-primitives/swift-coder-primitives"),
+        .package(path: "../../swift-primitives/swift-either-primitives"),
         .package(path: "../swift-async")
     ],
     targets: [
@@ -31,6 +32,7 @@ let package = Package(
                 .product(name: "Array Primitives", package: "swift-array-primitives"),
                 .product(name: "ASCII Decimal Parser Primitives", package: "swift-ascii-parser-primitives"),
                 .product(name: "Coder Primitives", package: "swift-coder-primitives"),
+                .product(name: "Either Primitives", package: "swift-either-primitives"),
                 .product(name: "Async", package: "swift-async")
             ]
         ),
