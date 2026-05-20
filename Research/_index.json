@@ -1,7 +1,7 @@
 {
   "$schema": "https://swift-institute.org/schemas/research-index-v1.json",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-05-19",
+  "generatedAt": "2026-05-20",
   "title": "Research Index — swift-json",
   "blurb": "",
   "scope": "swift-json (swift-foundations)",
@@ -53,11 +53,11 @@
     {
       "file": "parse-performance-canada-anomaly.md",
       "displayName": "Parse Performance — Canada Anomaly (Numeric-Heavy Workload)",
-      "topic": "Investigation of the 17× canada.json slowdown vs Foundation.JSONSerialization reported in the codec-throughput-vs-newcodable experiment (2026-05-19). Workload characterization (111,126 numbers, 50.6/KB density, 4× citm) identifies the per-Number construction path in JSON.Decode.Implementation.lexNumberValue as the dominant cost: three heap allocations per Number (byteArray, redundant Swift.Array(bytes) inside RFC_8259.Number.Original.init, and numStr via String(decoding:)) plus character-by-character Double.init(_: String) parsing. Hypothesis of per-element allocation PARTIALLY CONFIRMED — the array path itself is not the worst offender, but the per-Number path allocates ~333K times per parse (≥6.6 MB throwaway) for a 2.15 MB input. Recommends two small surgical patches (~40 LoC total): (1) new RFC_8259.Number.Original(_ bytes: borrowing Swift.Span<UInt8>) initializer + Double parse off span, (2) reserveCapacity(4) in parseArray. Estimated impact: 253ms → 100-150ms per parse, 17× gap → ~6-10×. Patch 3 (fast Double parser, Eisel-Lemire class) deferred until a primitive lands. Answers the load-bearing question: yes, fixable with small patches; the streaming-deserialize event-grain arc addresses a different axis (bytes → consumer struct, not bytes → tree) and does NOT substitute for these patches on tree-emitting workloads.",
-      "date": "2026-05-19",
-      "status": "RECOMMENDATION",
-      "statusDetail": null,
-      "statusRaw": "RECOMMENDATION",
+      "topic": "Investigation of the 17× canada.json slowdown vs Foundation.JSONSerialization reported in the codec-throughput-vs-newcodable experiment (2026-05-19). Workload characterization (111,126 numbers, 50.6/KB density, 4× citm) identifies the per-Number construction path in JSON.Decode.Implementation.lexNumberValue as the dominant cost: three heap allocations per Number (byteArray, redundant Swift.Array(bytes) inside RFC_8259.Number.Original.init, and numStr via String(decoding:)) plus character-by-character Double.init(_: String) parsing. Hypothesis of per-element allocation PARTIALLY CONFIRMED — the array path itself is not the worst offender, but the per-Number path allocates ~333K times per parse (≥6.6 MB throwaway) for a 2.15 MB input. Recommends two small surgical patches (~40 LoC total): (1) new RFC_8259.Number.Original(_ bytes: borrowing Swift.Span<UInt8>) initializer + Double parse off span, (2) reserveCapacity(4) in parseArray. Estimated impact: 253ms → 100-150ms per parse, 17× gap → ~6-10×. Patch 3 (fast Double parser, Eisel-Lemire class) deferred until a primitive lands. Answers the load-bearing question: yes, fixable with small patches; the streaming-deserialize event-grain arc addresses a different axis (bytes → consumer struct, not bytes → tree) and does NOT substitute for these patches on tree-emitting workloads. v1.1.0 (2026-05-19): Patches 1+2+3 all landed; observed ~6% wall-clock improvement vs projected 30–60%; doc reframes residual ~240 ms as tree-shape-bound (RFC_8259.Value enum allocation + tree teardown + intermediate array growth), with Double.init(_:String) cost premise refuted. v1.2.0 (2026-05-20, VALIDATED): per-call microbench of ASCII.Decimal.Float.parse vs Double(_: String) on 111,080 real canada float tokens under caffeinate -i + release: 0 bit-pattern mismatches; EL 21.3 ns/call min vs stdlib 23.5 ns/call min (1.10×–1.34× faster across MIN/median/p90/mean); wall-clock-savings ceiling N × (t_stdlib − t_EL) = 0.24–0.85 ms, i.e., 250×–900× smaller than the 220 ms residual gap and far below the 100 ms REFUTED threshold. Float parsing accounts for ~1.1% of canada parse cost (~2.6 ms / 235.6 ms min); the remaining ~99% is structurally not in float code. v1.1.0 tree-shape claim VALIDATED empirically with margin. Next canada-perf arc MUST target tree shape (arena, ~Copyable cascade, event-grain) — float-parse-targeted optimizations are exhausted.",
+      "date": "2026-05-20",
+      "status": "VALIDATED",
+      "statusDetail": "Per-call microbench 2026-05-20 confirms v1.1.0 tree-shape claim with margin; float-parse contribution bounded to ~1% of canada parse cost.",
+      "statusRaw": "RECOMMENDATION -> VALIDATED (Microbench Validation, 2026-05-20)",
       "tier": 1,
       "scope": null
     },
