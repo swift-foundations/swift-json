@@ -2,9 +2,9 @@
 
 <!--
 ---
-version: 1.4.0
+version: 1.4.1
 last_updated: 2026-05-20
-status: RECOMMENDATION (Time Profiler 2026-05-20 localizes the ~92% residual: Swift runtime generic-metadata machinery + Tagged/typed-index infra ≈ 34% of recorded samples; alloc/ARC ≈ 14%; user JSON code only ~13%)
+status: RECOMMENDATION (post-supervisor-review: pre-gates run; targeted @_specialize on lexer-primitives + cursor-primitives + tagged-primitives; ecosystem class-(c); honest Foundation-parity framing — Lever 1 brings 17× → ~13×, not parity)
 tier: 1
 ---
 -->
@@ -1485,6 +1485,144 @@ The Time Profiler trace is local at `/tmp/canada-parse.trace`; not
 committed (Instruments .trace files are large multi-file bundles).
 The categorized hotspot summary `/tmp/hotspots.txt` is the
 durable derivation; this document captures the analysis.
+
+### v1.4.1 — Supervisor pushback + pre-gate findings (2026-05-20)
+
+Supervisor independent review of v1.4.0 surfaced four substantive
+pushback points and required two pre-gates before authorizing
+Lever 1 (specialization audit):
+
+1. **"≤46% of attributable" overstates ROI.** Total parse 235 ms;
+   27.8% of all samples in metadata machinery ≈ ~65 ms. Closing
+   100% of metadata cost brings canada 17× → ~12× Foundation, not
+   to parity.
+2. **"Algorithm is fast" mis-classifies metadata cost.** Swift
+   runtime metadata work IS user code's runtime overhead at the
+   abstraction-layer boundary (Tagged.retag, Cursor.peek,
+   CarrierProtocol.vector). Framing as "compiler problem" understates
+   structural design cost.
+3. **NewCodable counter-evidence.** Same Swift compiler; 0.36×
+   Foundation. If metadata machinery were universal, NewCodable
+   would face it. Speed comes from architectural choices, not
+   from compiler immunity. The cost is institute-primitives-specific.
+4. **618-sample basis is noisy** for a class-(c) architectural
+   conclusion. 27.8% metadata rests on 172 samples.
+
+Pre-gates authorized:
+
+#### Pre-Gate 1: SIL spot-check (binary symbol inspection at -O)
+
+Inspected `parse-performance-bench` release binary symbols
+(65,356 demangled symbols). Counted specialized vs generic-only
+instances for hot-path functions:
+
+| Function | Specialized? | Implication |
+|---|---|---|
+| `Cursor.consume() -> Byte` | ✅ YES (`<serialized, Text>`) | Hot path inlined; supervisor's 2026-05-14 audit reaffirmed |
+| `ASCII.Decimal.Float.parse(Span<Byte>)` | ✅ YES | EL parser monomorphized |
+| `Cursor.peek() -> Byte?` | ❌ NO | Generic dispatch every call |
+| `Lexer.Scanner.peek<X: Byte.Protocol>() -> X?` | ❌ NO | Witness table + closure forwarding |
+| `Tagged.retag<A>(_:to:) -> Tagged<A1, B>` | ❌ NO | Generic dispatch on every retag |
+| `_CarrierProtocol.vector` (witness) | ❌ NO | Per-call witness lookup |
+
+**The supervisor's instinct was partially right and partially refuted.**
+`Cursor.consume()` IS specialized (so the supervisor's previous-audit
+finding stands), but `Cursor.peek()`, `Tagged.retag<A>`, the typed
+`peek<X>()`, and `_CarrierProtocol.vector` witness are NOT. Each
+unspecialized site fires runtime metadata-cache lookups per call.
+
+This refutes my v1.4.0's broad "specialization audit" framing AND
+the supervisor's strict "@_specialize is the wrong tool" pushback.
+The right framing: **targeted @_specialize on the specific functions
+the SIL spot-check identified as unspecialized**, not a blanket
+audit, not abandoning the lever.
+
+#### Pre-Gate 2: Cross-workload Time Profiler (twitter vs canada)
+
+Ran Time Profiler on twitter.json (617 KB, ~7821 floats, mostly
+strings, 256 iters, 5.6s total recording, 556 samples). Compared
+to canada (2.15 MB, 111K floats, 32 iters, 8.95s recording, 618
+samples). citm_catalog.json not available on disk locally.
+
+Cross-workload category shares (% of attributable):
+
+| Category | Twitter | Canada | Delta |
+|---|---:|---:|---|
+| **Metadata machinery** | 33.4% | 45.5% | +12.1 pp |
+| Allocation / ARC | 30.3% | 22.5% | -7.8 pp |
+| User JSON code | 28.6% | 22.0% | -6.6 pp |
+| Tagged / typed-index | 7.7% | 10.1% | +2.4 pp |
+
+Value-count ratio canada:twitter ≈ 50:1. Metadata%-ratio ≈ 1.6:1.
+
+**Metadata cost scales SUBLINEARLY with Value count** — neither
+of the supervisor's clean hypotheses is cleanly supported:
+
+- **Pure specialization-issue diagnosis** would predict roughly
+  CONSTANT metadata% across workloads. Observed: 33.4% (twitter)
+  vs 45.5% (canada). NOT constant. **Refuted.**
+- **Pure tree-shape diagnosis** would predict metadata% scales
+  with per-Value volume. 50× Values → expected ~50× metadata%.
+  Observed: 1.6× metadata%. Strongly **sublinear**.
+
+**Composite diagnosis:** there's a workload-independent baseline
+(~17–20% of total samples in metadata machinery) PLUS an additional
+~7–10 pp on top that scales modestly with per-Value allocation
+volume. Both interventions are warranted but the relative weights
+differ from v1.4.0's framing.
+
+#### Refined recommendation (replaces v1.4.0 Lever 1 framing)
+
+| Lever | Target | Cost | Realistic ROI on canada | ROI on twitter |
+|---|---|---|---:|---:|
+| **1a. Targeted `@_specialize`** on `Tagged.retag<A>(_:to:)`, `Cursor.peek()`, `Lexer.Scanner.peek<X: Byte.Protocol>()`, `_CarrierProtocol.vector` witness — specifically for the canada hot-path instantiations (Text, Byte, Cardinal, Ordinal, ASCII.Code) | L1/L2 work on lexer-primitives / cursor-primitives / tagged-primitives | Medium (~100–300 LoC of @_specialize annotations) | ~17-23% of total samples → reduces canada from 17× → ~13× Foundation | ~17% of total samples → reduces twitter from 1.4× → ~1.2× Foundation |
+| **1b. Tagged hot-path audit** — lift `Tagged.init(fromZero:)` and `Tagged.retag(_:to:)` out of inner loops where possible | swift-json + lexer-primitives | Low (audit + selective de-Tagging) | ≤ 10% (Tagged samples) | ≤ 8% |
+| 2. Path A (Buffer.Arena tree storage) | swift-json + swift-rfc-8259 | High | ≤ 2.3% on canada | ≤ 5% on twitter (alloc share higher) |
+| 3. Path B (~Copyable RFC_8259.Value cascade) | ~4000 LoC across 3 packages | Very high | ≤ 1–2% on canada | ≤ 2% on twitter |
+| 4. Architecture B (arena tree + materialize) | ~3000 LoC | Very high | Theoretically ~50%+ on canada | ~10% on twitter |
+| 5. Event-grain consumption | Already in progress | Bypasses tree | Orthogonal | Orthogonal |
+
+**Class-(c) ecosystem flag (reinforced):** Lever 1a touches
+**lexer-primitives + cursor-primitives + tagged-primitives** — these
+are L1 packages used by every parser in the ecosystem (JSON, XML,
+plist, CBOR, …). Specialization improvements there benefit every
+tree-emitting parser, not just swift-json. This is the most
+load-bearing finding in this investigation; v1.4.0 understated it.
+
+#### Honest framing of the gap to Foundation
+
+Canada 17× Foundation = ~221 ms residual to close.
+
+| Lever | Closes | Remaining |
+|---|---:|---:|
+| 1a + 1b targeted specialization | ~50–65 ms | ~155–170 ms (10–12× Foundation) |
+| + Tagged audit residual | ~10–15 ms | ~140–155 ms (10–11× Foundation) |
+| + Path A/B + array reserve | ~10 ms | ~130–145 ms (~10× Foundation) |
+| Architecture B (replaces above) | ~100–150 ms | ~70–120 ms (5–9× Foundation) |
+| Event-grain (replaces tree entirely for typed-decode consumers) | bypasses tree | Foundation-class |
+
+**Foundation parity (1.0×) is NOT a realistic outcome of any
+single lever.** Lever 1a delivers a meaningful improvement
+(~10–17× → ~10–13× on canada; ~1.4× → ~1.2× on twitter) at
+moderate cost. The bigger question — Architecture B vs accepting
+canada-class workloads route via event-grain — remains a separate
+strategic decision.
+
+#### What the supervisor's review got exactly right
+
+- Confidence in v1.4.0 was overclaimed
+- "Algorithm is fast" was misleading framing
+- 618-sample basis was noisy
+- Cross-workload validation as PRECONDITION (not Open Question) was the correct discipline
+- Class-(c) ecosystem framing was understated
+- SIL verification first was the right gate
+
+#### What v1.4.0 + pre-gates surfaced beyond the supervisor's framing
+
+- Specialization status is MIXED, not all-or-nothing (`Cursor.consume` ✓; `Cursor.peek` ✗; `Tagged.retag` ✗)
+- The metadata cost has IDENTIFIABLE generic-dispatch source (specific functions, not amorphous)
+- Twitter shares meaningful metadata cost (33.4% of attributable) — this is ecosystem-wide
+- The right target packages are lexer-primitives + cursor-primitives + tagged-primitives, not swift-json alone
 
 ### Skill references (v1.4.0 additions)
 
