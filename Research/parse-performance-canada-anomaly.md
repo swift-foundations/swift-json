@@ -2,9 +2,9 @@
 
 <!--
 ---
-version: 1.1.0
-last_updated: 2026-05-19
-status: RECOMMENDATION (Patches 1+2 LANDED; Patch 3 LANDED with negative result)
+version: 1.2.0
+last_updated: 2026-05-20
+status: VALIDATED (per-call microbench 2026-05-20 confirms v1.1.0 tree-shape claim)
 tier: 1
 ---
 -->
@@ -712,6 +712,238 @@ Independent of canada's wall-clock:
   (Patches 1+2 → small arc, Patch 3 → deferred with explicit gating
   condition).
 
+---
+
+## v1.2.0 — Microbench Validation (2026-05-20)
+
+Date: 2026-05-20. Per-call microbench of `ASCII.Decimal.Float.parse`
+vs `Double(_: String)` on real canada float tokens. The v1.1.0
+disposition rested on SUM-of-N noisy wall-clock data; this section
+empirically validates the tree-shape claim at per-call granularity.
+
+### Verdict: VALIDATED
+
+v1.1.0's claim — that the residual ~240 ms canada parse time is
+dominated by `RFC_8259.Value` enum allocation + tree teardown +
+intermediate array growth, **not** by `Double` parsing — is
+empirically validated by direct per-call measurement.
+
+### Methodology
+
+Extended `parse-performance-bench` (commit landing alongside this
+section) with two CLI modes:
+
+- `stats` — MIN/median/p90/mean per-iter, 16 warmup + 256 measured
+  iters of Foundation.JSONSerialization and JSON.parse([UInt8])
+  back-to-back. MIN-of-N + warmup is Apple's NewCodable canonical
+  low-noise summary.
+- `float-microbench` — scans the input for float-shaped numbers
+  (numbers containing `.`, `e`, or `E` — the production set
+  `lexNumberValue` routes through EL). Per token: verifies
+  `ASCII.Decimal.Float.parse(span)` agrees bit-for-bit with
+  `Double(_: String)`; times both per-call across 16 warmup + 256
+  measured iters; reports per-call ns MIN/median/p90/mean and the
+  derived wall-clock-savings ceiling `N × (t_stdlib − t_EL)`.
+
+Run conditions: `caffeinate -i swift run -c release` on macOS 26
+(arm64), Swift 6.3.2, swift-json HEAD at `1f4601f` (Patches 1+2+3
+all landed). Bench commit + run pre-registered before adjudication.
+
+Workload: `canada.json` (`/Users/coen/Developer/swiftlang/swift-foundation/Benchmarks/Benchmarks/JSON/Resources/canada.json`,
+2.15 MB, 2 251 051 bytes). Path note: the v1.1.0 handoff cited an
+older path under `Tests/NewCodableBenchmarks/Resources/`; the live
+canonical source on this disk is under `Benchmarks/Benchmarks/JSON/`
+(unchanged file, different in-repo location post-relocation in the
+upstream).
+
+### Results — stats (256 iters, MIN-of-N)
+
+| Statistic | Foundation (ms/iter) | swift-json (ms/iter) | swift-json / Foundation |
+|---|---:|---:|---:|
+| min     | 13.600   | 235.616  | 17.32× |
+| median  | 14.240   | 260.483  | 18.29× |
+| p90     | 16.116   | 363.166  | 22.53× |
+| mean    | 15.636   | 310.782  | 19.88× |
+
+Methodology comparison: the brief's expected 12.1× was derived
+against a Foundation baseline of 20.10 ms; on this machine
+Foundation parses canada in 13.60 ms (faster baseline, same payload,
+different system state) — the ratio inflates accordingly. Canonical
+swift-json absolute time (235.6 ms) matches the brief's 243.9 ms
+within ±3% noise. The 17× shape persists.
+
+### Results — float-microbench (256 iters, 111 080 tokens)
+
+Token collection: 111 080 float-shaped tokens in canada
+(mean length 18.25 bytes; v1.1.0 cited 111 126 — small delta is
+integer-valued numbers excluded by the `sawDot || sawExp` filter,
+which mirrors `lexNumberValue`'s `isFloat` predicate).
+
+Bit-pattern verification: **0 mismatches across all 111 080
+tokens**. `ASCII.Decimal.Float.parse(span).bitPattern ==
+Double(strForm)!.bitPattern` holds universally.
+
+| Statistic | EL (ns/call) | stdlib (ns/call) | stdlib / EL |
+|---|---:|---:|---:|
+| min     | 21.300 | 23.488 | 1.10× |
+| median  | 22.218 | 26.782 | 1.21× |
+| p90     | 23.190 | 29.249 | 1.26× |
+| mean    | 22.663 | 30.317 | 1.34× |
+
+Wall-clock-savings ceiling per parse, `N × (t_stdlib − t_EL)`:
+
+| Pairing | Savings (ms) | Fraction of 235.6 ms | Fraction of residual 220 ms |
+|---|---:|---:|---:|
+| min-vs-min       | 0.24 | 0.10% | 0.11% |
+| median-vs-median | 0.51 | 0.20% | 0.23% |
+| mean-vs-mean     | 0.85 | 0.36% | 0.39% |
+
+### Adjudication
+
+The v1.1.0 disposition table is:
+
+- **VALIDATED**: float parsing is empirically a tiny fraction of
+  total cost — wall-clock-savings-ceiling `≪ 220 ms`.
+- **REFUTED**: savings ceiling `≥ 100 ms` (float parsing could have
+  closed a meaningful chunk of the residual gap).
+- **MIXED**: in between.
+
+Observed savings ceiling: **0.24–0.85 ms** (min-pairing to
+mean-pairing). That is **250×–900× smaller** than the 220 ms
+residual gap and far below the 100 ms REFUTED threshold. Squarely
+in the VALIDATED region.
+
+Equivalently: total float-parse cost per canada parse is
+**~2.6 ms** (stdlib floor) or **~2.4 ms** (EL floor) — ≈ **1.1%
+of the 235.6 ms canada parse**. Even if the float parser were
+reduced to zero cost (~the limit of any further float-parse
+optimization, including SIMD), the maximum saving would be ~2.6 ms.
+
+The remaining **~233 ms (99%)** of canada parse cost is
+structurally not in float parsing. v1.1.0's diagnosis stands:
+`RFC_8259.Value` enum allocation × ~333K Values per parse,
+tree teardown via outlined-destroy, and intermediate
+`[RFC_8259.Value].append` doublings collectively dominate the
+canada workload.
+
+### Why the EL landing delivered ~6% and not 30–60%
+
+v1.0.0 projected Patches 1+2+3 collectively closing canada to
+30–60 ms (~2–4× Foundation). The microbench shows the structural
+bound:
+
+- Patch 3 (EL) ceiling: ~2.6 ms. Observed Patch 3 contribution
+  (per v1.1.0's table): ~7 ms (the difference between pre-EL
+  246.3 ms and post-EL 239.5 ms). Patch 3's contribution exceeds
+  its float-parse ceiling because EL also eliminated `numStr`
+  String allocations (~111K × ~20 bytes ≈ 2.2 MB of allocator
+  traffic), which contributes secondary savings outside the
+  float-parse cost itself.
+- Patches 1+2 ceiling: bounded by allocator-traffic reduction
+  (eliminating `byteArray` + the redundant copy inside
+  `RFC_8259.Number.Original.init`). Observed: ~7 ms collectively
+  (per v1.1.0).
+- Patches 1+2+3 combined: ~14 ms / 246 ms ≈ 5.7%. Matches v1.1.0's
+  observed ~6%.
+
+The 30–60 ms projection was structurally unachievable because
+the dominant cost lives in `RFC_8259.Value` tree, not in
+`lexNumberValue`'s per-Number construction path. v1.0.0's
+projection was internally consistent under its (incorrect)
+premise that `Double.init(_: String)` contributed ~111–222 ms;
+the microbench shows the actual contribution is ~2.6 ms.
+
+### Implication for the next canada-perf arc
+
+- **Float-parse-targeted optimizations are exhausted.** SIMD float
+  parsing, alternative algorithms, etc., cannot meaningfully close
+  the 220 ms residual gap (theoretical ceiling: ~2.6 ms).
+- **`ASCII.Decimal.Float.Parser` is correctness-positive and
+  evergreen** — keep. It eliminates ~2.2 MB of allocator traffic
+  per canada parse and delivers a ~30% per-call speedup vs stdlib
+  for free; modest but real.
+- **Next arc must target tree shape.** Candidates: (a) arena-allocated
+  `RFC_8259.Value` storage to amortize per-Value allocation,
+  (b) `~Copyable` `RFC_8259.Value` cascade (currently SUPERSEDED-BY-EVIDENCE
+  at small N per `value-tree-redesign-v2.md`; may re-open with a
+  different shape), (c) event-grain `JSON.Span.EventStream` for
+  consumers that don't need the tree (already in progress).
+- **Speculative tree-shape arcs MUST gate on this microbench.**
+  Any proposal that doesn't move `N × (t_stdlib − t_tree)` past
+  the 100 ms threshold is structurally bounded to deliver <0.4%
+  improvement.
+
+### Methodology cross-checks
+
+- Per-call microbench measures **only** `ASCII.Decimal.Float.parse`
+  + `Double.init(_: String)` in isolation. Production
+  `lexNumberValue` does additional work per Number (cursor advance,
+  byte accumulation, `RFC_8259.Number.Original` construction, enum
+  case alloc). The microbench's per-call number is a **lower
+  bound** on production float-parse cost; the production hot path
+  is somewhat larger. Even doubling the per-call cost to account
+  for surrounding work, the float-parse fraction stays under 3%.
+- Bit-pattern agreement across 111 080 real-world float tokens is
+  the strongest correctness floor available — covers Clinger fast
+  path, Eisel–Lemire core, and the 19-digit boundary; zero
+  disagreements means the EL landing has not introduced rounding
+  regressions on this workload class.
+- `caffeinate -i` + release mode + 16-iter warmup eliminates the
+  power-gating + cold-cache + dispatch-fork-up confounds that
+  inflate min-of-N when iter counts are small or system load is
+  high.
+
+### Hypothesis disposition (final, replaces v1.1.0's)
+
+- **v1.1.0 hypothesis "the residual ~230 ms is `RFC_8259.Value`
+  enum allocation + tree teardown + intermediate array doublings":
+  CONFIRMED-BY-ELIMINATION.** Direct measurement of the float-parse
+  contribution bounds it to ≤ ~2.6 ms (~1%). The remaining ~233 ms
+  is structurally not in float code.
+- **v1.0.0 hypothesis "Double.init(_: String) IS the dominant
+  cost": empirically refuted with margin.** Microbench shows
+  Double.init costs ~23 ns/call (~2.6 ms/parse), not the ~111-222 ms
+  v1.0.0 framed.
+- **EL parser itself is healthy.** EL achieves 1.10×–1.34× stdlib
+  speedup with 0 bit-pattern disagreements on 111 080 real tokens.
+  Stdlib's `Double(_: String)` is already well-optimized for the
+  canada token shape (short literals, mantissa in 19-digit range);
+  EL's gains are modest because stdlib was already close to the
+  underlying hardware floor. The asymptotic case for EL is
+  exotic-shape inputs (long literals, slow-path numerics), which
+  canada doesn't exercise.
+
+### Out of scope (preserved from v1.1.0)
+
+- Tree-shape redesigns (arena, ~Copyable cascade, event-grain) —
+  separate research arcs.
+- Verification on `twitter.json` and `citm_catalog.json` — the
+  microbench harness is workload-parametric; future arcs can run
+  the same modes on those payloads to cross-validate the per-call
+  ratios across workload classes.
+- SIMD float parsing — bounded by the same 2.6 ms ceiling on
+  canada; not a high-value pursuit absent a different workload.
+
+### Skill references (v1.2.0 additions)
+
+- [BENCH-005] — comparison benchmark methodology preserved
+  end-to-end; same harness, same payload, same `caffeinate -i`
+  release-mode, MIN-of-N statistics.
+- [EXP-011] — workaround-validation trap: the `stats` mode alone
+  could not distinguish "EL is slow" from "tree-shape dominates";
+  the per-call float-microbench was required to discriminate.
+- [HANDOFF-016] (premise staleness) — v1.0.0's
+  `Double.init(_: String)` cost premise (~111-222 ms) is now
+  refuted with margin; v1.0.0 reading was internally consistent
+  under that premise but the premise is empirically false.
+- [HANDOFF-047] (writer-side primary-source sampling) — v1.1.0's
+  cost-distribution numbers (~3% allocator / ~3% Double / ~94%
+  remaining) were arrived at by elimination; v1.2.0 grounds the
+  ~3% Double figure in direct measurement.
+- [RES-023] — empirical-claim verification: every per-call number
+  in this section traces to a `parse-performance-bench` invocation
+  recorded in the commit landing alongside.
+
 ## Provenance
 
 Investigation invoked via /research-process on the
@@ -736,3 +968,23 @@ Verification at write time per [RES-023]:
   `swift-ascii-parser-primitives` ships `ASCII.Decimal.Parser` for
   integers; no float counterpart surfaced in any prior research doc
   in `swift-json/Research/` or workspace-wide grep.
+
+### v1.2.0 addendum (2026-05-20)
+
+Per-call microbench session invoked via
+`/Users/coen/Developer/HANDOFF-el-parser-microbench-validation.md`
+(focused investigation brief). Scope: validate or supersede v1.1.0's
+tree-shape claim via empirical per-call measurement of
+`ASCII.Decimal.Float.parse` vs `Double(_: String)` on the canada
+workload's actual float tokens.
+
+Bench-harness extension: `parse-performance-bench` gained `stats`
+and `float-microbench` CLI modes plus `swift-ascii-parser-primitives`
+as an explicit dependency. Both modes run under `caffeinate -i` +
+`swift run -c release` per [BENCH-005] / Apple's NewCodable
+methodology.
+
+No production `Sources/JSON/` edits this session — scope was
+read-only on the live parser surface. Verdict (VALIDATED) updates
+the v1.1.0 RECOMMENDATION status to v1.2.0 VALIDATED and bumps the
+`Research/_index.json` entry.
