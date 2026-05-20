@@ -45,10 +45,10 @@ extension JSON.Decode {
         _ bytes: C,
         maxDepth: Int = 512
     ) throws(RFC_8259.Error) -> RFC_8259.Value
-    where C.Element == UInt8, C.Index: Sendable {
+    where C.Element == Byte, C.Index: Sendable {
         var parserError: RFC_8259.Error? = nil
         let fastResult: RFC_8259.Value? = bytes.withContiguousStorageIfAvailable {
-            (buffer: UnsafeBufferPointer<UInt8>) -> RFC_8259.Value? in
+            (buffer: UnsafeBufferPointer<Byte>) -> RFC_8259.Value? in
             let span = buffer.span
             do {
                 return try Implementation.parse(span, maxDepth: maxDepth)
@@ -63,7 +63,7 @@ extension JSON.Decode {
         if let value = fastResult { return value }
         if let err = parserError { throw err }
         let array = Swift.Array(bytes)
-        return try array.withUnsafeBufferPointer { (buffer: UnsafeBufferPointer<UInt8>) throws(RFC_8259.Error) -> RFC_8259.Value in
+        return try array.withUnsafeBufferPointer { (buffer: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) -> RFC_8259.Value in
             try Implementation.parse(buffer.span, maxDepth: maxDepth)
         }
     }
@@ -74,33 +74,17 @@ extension JSON.Decode {
 extension JSON.Decode {
     /// Decodes a JSON string to a JSON value.
     ///
-    /// Dispatches to the wholesale fast path when the string's UTF-8
-    /// view exposes contiguous storage (the case for native Swift
-    /// `String` and — on Apple platforms with macOS 26 / iOS 26 — for
-    /// bridged `NSString` per the A0 probe in
-    /// `Experiments/parse-performance-tier-4-feasibility/`).
+    /// String inputs go through one `.map(Byte.init)` materialisation at
+    /// the stdlib boundary — `String.UTF8View` is `UInt8`-typed; the
+    /// institute parser is Byte-typed end-to-end. The copy is bounded
+    /// by the input length and runs once per parse.
     @inlinable
     public static func parse(
         _ string: String,
         maxDepth: Int = 512
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
-        var parserError: RFC_8259.Error? = nil
-        let fastResult: RFC_8259.Value? = string.utf8.withContiguousStorageIfAvailable {
-            (buffer: UnsafeBufferPointer<UInt8>) -> RFC_8259.Value? in
-            let span = buffer.span
-            do {
-                return try Implementation.parse(span, maxDepth: maxDepth)
-            } catch let error as RFC_8259.Error {
-                parserError = error
-                return nil
-            } catch {
-                parserError = nil
-                return nil
-            }
-        } ?? nil
-        if let value = fastResult { return value }
-        if let err = parserError { throw err }
-        return try parse(Swift.Array(string.utf8), maxDepth: maxDepth)
+        let byteArray: [Byte] = string.utf8.map(Byte.init)
+        return try parse(byteArray, maxDepth: maxDepth)
     }
 }
 
@@ -113,22 +97,7 @@ extension JSON.Decode {
         _ string: Substring,
         maxDepth: Int = 512
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
-        var parserError: RFC_8259.Error? = nil
-        let fastResult: RFC_8259.Value? = string.utf8.withContiguousStorageIfAvailable {
-            (buffer: UnsafeBufferPointer<UInt8>) -> RFC_8259.Value? in
-            let span = buffer.span
-            do {
-                return try Implementation.parse(span, maxDepth: maxDepth)
-            } catch let error as RFC_8259.Error {
-                parserError = error
-                return nil
-            } catch {
-                parserError = nil
-                return nil
-            }
-        } ?? nil
-        if let value = fastResult { return value }
-        if let err = parserError { throw err }
-        return try parse(Swift.Array(string.utf8), maxDepth: maxDepth)
+        let byteArray: [Byte] = string.utf8.map(Byte.init)
+        return try parse(byteArray, maxDepth: maxDepth)
     }
 }

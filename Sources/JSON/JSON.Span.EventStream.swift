@@ -33,7 +33,7 @@ extension JSON.Span {
 
         @inlinable
         @_lifetime(borrow bytes)
-        public init(_ bytes: borrowing Swift.Span<UInt8>, maxDepth: Int = 512) {
+        public init(_ bytes: borrowing Swift.Span<Byte>, maxDepth: Int = 512) {
             self.inner = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(bytes, limit: maxDepth)
         }
     }

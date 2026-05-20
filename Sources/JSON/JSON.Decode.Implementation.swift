@@ -58,7 +58,7 @@ extension JSON.Decode {
 
         @inlinable
         @_lifetime(borrow bytes)
-        internal init(_ bytes: borrowing Swift.Span<UInt8>, maxDepth: Int) {
+        internal init(_ bytes: borrowing Swift.Span<Byte>, maxDepth: Int) {
             self.scanner = Lexer_Primitives.Lexer.Scanner(bytes)
             self.depth = 0
             self.maxDepth = maxDepth
@@ -75,7 +75,7 @@ extension JSON.Decode.Implementation {
     /// Parses the span and returns a JSON value.
     @inlinable
     internal static func parse(
-        _ bytes: borrowing Swift.Span<UInt8>,
+        _ bytes: borrowing Swift.Span<Byte>,
         maxDepth: Int
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
         var parser = JSON.Decode.Implementation(bytes, maxDepth: maxDepth)
@@ -577,14 +577,12 @@ extension JSON.Decode.Implementation {
     @_lifetime(self: copy self)
     internal mutating func lexNumberValue() throws(RFC_8259.Error) -> RFC_8259.Number {
         let startCursor = scanner.position
-        var bytes = Array_Primitives.Array<UInt8>.Small<24>()
+        var bytes = Array_Primitives.Array<Byte>.Small<24>()
 
         // Optional minus
         // Type-up: lift to ASCII.Code at the peek boundary.
         if let b: ASCII.Code = scanner.peek(), b == .hyphen {
-            // AUDIT [.underlying]: numeric-byte accumulation for span-shaped
-            // parsing (Int64/UInt64/Double + Eisel-Lemire span input).
-            bytes.append(scanner.consume().underlying)
+            bytes.append(scanner.consume())
         }
 
         // Integer part
@@ -596,8 +594,7 @@ extension JSON.Decode.Implementation {
         }
 
         if firstDigit == .`0` { // Leading zero
-            // AUDIT [.underlying]: numeric-byte accumulation.
-            bytes.append(scanner.consume().underlying)
+            bytes.append(scanner.consume())
 
             if let next: ASCII.Code = scanner.peek(), next.isDigit {
                 throw .invalidNumber(
@@ -607,8 +604,7 @@ extension JSON.Decode.Implementation {
             }
         } else {
             while let code: ASCII.Code = scanner.peek(), code.isDigit {
-                // AUDIT [.underlying]: numeric-byte accumulation.
-                bytes.append(scanner.consume().underlying)
+                bytes.append(scanner.consume())
             }
         }
 
@@ -617,8 +613,7 @@ extension JSON.Decode.Implementation {
         // Optional fraction
         if let b: ASCII.Code = scanner.peek(), b == .period {
             isFloat = true
-            // AUDIT [.underlying]: numeric-byte accumulation.
-            bytes.append(scanner.consume().underlying)
+            bytes.append(scanner.consume())
 
             guard let firstFracDigit: ASCII.Code = scanner.peek(), firstFracDigit.isDigit else {
                 throw .invalidNumber(
@@ -628,20 +623,17 @@ extension JSON.Decode.Implementation {
             }
 
             while let code: ASCII.Code = scanner.peek(), code.isDigit {
-                // AUDIT [.underlying]: numeric-byte accumulation.
-                bytes.append(scanner.consume().underlying)
+                bytes.append(scanner.consume())
             }
         }
 
         // Optional exponent
         if let e: ASCII.Code = scanner.peek(), e == .e || e == .E {
             isFloat = true
-            // AUDIT [.underlying]: numeric-byte accumulation.
-            bytes.append(scanner.consume().underlying)
+            bytes.append(scanner.consume())
 
             if let sign: ASCII.Code = scanner.peek(), sign == .plusSign || sign == .hyphen {
-                // AUDIT [.underlying]: numeric-byte accumulation.
-                bytes.append(scanner.consume().underlying)
+                bytes.append(scanner.consume())
             }
 
             guard let firstExpDigit: ASCII.Code = scanner.peek(), firstExpDigit.isDigit else {
@@ -652,8 +644,7 @@ extension JSON.Decode.Implementation {
             }
 
             while let code: ASCII.Code = scanner.peek(), code.isDigit {
-                // AUDIT [.underlying]: numeric-byte accumulation.
-                bytes.append(scanner.consume().underlying)
+                bytes.append(scanner.consume())
             }
         }
 
@@ -683,9 +674,13 @@ extension JSON.Decode.Implementation {
             }
             return RFC_8259.Number(value, original: original)
         } else {
+            // Stdlib boundary: String.init(unsafeUninitializedCapacity:)
+            // takes UnsafeMutableBufferPointer<UInt8>. Read Byte's
+            // underlying UInt8 at each slot — the only legitimate use of
+            // `.underlying` per W2 byte-cascade discipline (stdlib edge).
             let numStr = String(unsafeUninitializedCapacity: span.count) { dst in
                 for i in 0..<span.count {
-                    dst[i] = span[i]
+                    dst[i] = span[i].underlying
                 }
                 return span.count
             }

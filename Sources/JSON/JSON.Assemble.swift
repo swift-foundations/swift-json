@@ -44,7 +44,7 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
     /// makes the §4.3 default-fallback non-regressing.
     @inlinable
     internal static func consume(
-        bytes: Swift.Span<UInt8>,
+        bytes: Swift.Span<Byte>,
         limit: Int
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
         try JSON.Decode.Implementation.parse(bytes, maxDepth: limit)

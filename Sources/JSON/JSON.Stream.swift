@@ -88,7 +88,7 @@ extension JSON.ND {
         var iterator: I
 
         @usableFromInline
-        var buffer: [UInt8] = []
+        var buffer: [Byte] = []
 
         @usableFromInline
         var done = false
@@ -130,7 +130,7 @@ extension JSON.ND {
                     // Skip carriage return (handle \r\n)
                     if byte == 0x0D { continue }
 
-                    buffer.append(byte)
+                    buffer.append(Byte(byte))
                 } catch {
                     // Iterator threw - treat as end of stream
                     done = true
@@ -170,10 +170,10 @@ extension JSON {
         collecting bytes: S
     ) async throws(JSON.Error) -> JSON
     where S.Element == UInt8 {
-        var buffer: [UInt8] = []
+        var buffer: [Byte] = []
         do {
             for try await byte in bytes {
-                buffer.append(byte)
+                buffer.append(Byte(byte))
             }
         } catch {
             throw .unknown
@@ -252,10 +252,10 @@ extension JSON.Parse {
         _ bytes: S
     ) async throws(JSON.Error) -> JSON
     where S.Element == UInt8 {
-        var buffer: [UInt8] = []
+        var buffer: [Byte] = []
         do {
             for try await byte in bytes {
-                buffer.append(byte)
+                buffer.append(Byte(byte))
             }
         } catch {
             throw .unknown

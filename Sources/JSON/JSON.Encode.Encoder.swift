@@ -92,8 +92,11 @@ extension JSON.Encode.Encoder {
             buffer.append(contentsOf: Self.keywordFalse)
 
         case .number(let n):
-            // Use original bytes for lossless round-trip
-            buffer.append(contentsOf: n.original.bytes)
+            // Use original bytes for lossless round-trip. Buffer is
+            // UInt8-typed (encoder output is byte-stream payload to
+            // network/file consumers); Number.Original.bytes is Byte-
+            // typed. Lazy `.underlying` projects without allocation.
+            buffer.append(contentsOf: n.original.bytes.lazy.map(\.underlying))
 
         case .string(let s):
             encodeString(s, into: &buffer)

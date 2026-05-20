@@ -62,7 +62,7 @@ extension JSON {
         /// - Throws: `JSON.Error` if parsing fails.
         @inlinable
         public func callAsFunction<Bytes>(_ bytes: Bytes) throws(JSON.Error) -> JSON
-        where Bytes: Swift.Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
+        where Bytes: Swift.Collection<Byte>, Bytes: Sendable, Bytes.Index: Sendable {
             do {
                 let value = try JSON.Decode.parse(bytes, maxDepth: maxDepth)
                 return JSON(value)
@@ -199,7 +199,7 @@ extension JSON {
         /// - Throws: `JSON.Error` if parsing fails.
         @inlinable
         public func parse<Bytes>(_ bytes: Bytes) throws(JSON.Error) -> JSON
-        where Bytes: Swift.Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
+        where Bytes: Swift.Collection<Byte>, Bytes: Sendable, Bytes.Index: Sendable {
             do {
                 let value = try JSON.Decode.parse(bytes, maxDepth: maxDepth)
                 return JSON(value)
@@ -258,7 +258,7 @@ extension JSON {
         /// - Throws: `Parser.Error.Located<JSON.Error>` if parsing fails.
         @inlinable
         public func parse<Bytes>(_ bytes: Bytes) throws(Parser.Error.Located<JSON.Error>) -> JSON
-        where Bytes: Swift.Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
+        where Bytes: Swift.Collection<Byte>, Bytes: Sendable, Bytes.Index: Sendable {
             do {
                 let value = try JSON.Decode.parse(bytes, maxDepth: maxDepth)
                 return JSON(value)

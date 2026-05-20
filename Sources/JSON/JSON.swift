@@ -250,7 +250,7 @@ extension JSON {
     /// - Throws: `JSON.Error` if parsing fails.
     @inlinable
     public static func parse<Bytes>(_ bytes: Bytes) throws(JSON.Error) -> JSON
-    where Bytes: Swift.Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
+    where Bytes: Swift.Collection<Byte>, Bytes: Sendable, Bytes.Index: Sendable {
         do {
             let value = try JSON.Decode.parse(bytes)
             return JSON(value)

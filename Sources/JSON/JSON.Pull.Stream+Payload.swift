@@ -257,14 +257,11 @@ internal func _lexNumber(
     scanner: inout Lexer.Scanner
 ) throws(RFC_8259.Error) -> RFC_8259.Number {
     let startCursor = scanner.position
-    var bytes = Array_Primitives.Array<UInt8>.Small<24>()
+    var bytes = Array_Primitives.Array<Byte>.Small<24>()
 
     // Optional minus.
-    // Type-up: lift to ASCII.Code at the peek boundary.
     if let b: ASCII.Code = scanner.peek(), b == .hyphen {
-        // AUDIT [.underlying]: numeric-byte accumulation for span-shaped
-        // parsing (Int64/UInt64/Double + Eisel-Lemire span input).
-        bytes.append(scanner.consume().underlying)
+        bytes.append(scanner.consume())
     }
 
     // Integer part.
@@ -275,8 +272,7 @@ internal func _lexNumber(
         )
     }
     if firstDigit == .`0` {
-        // AUDIT [.underlying]: numeric-byte accumulation.
-        bytes.append(scanner.consume().underlying)
+        bytes.append(scanner.consume())
         if let next: ASCII.Code = scanner.peek(), next.isDigit {
             throw .invalidNumber(
                 at: _position(at: startCursor, scanner: scanner),
@@ -285,8 +281,7 @@ internal func _lexNumber(
         }
     } else {
         while let code: ASCII.Code = scanner.peek(), code.isDigit {
-            // AUDIT [.underlying]: numeric-byte accumulation.
-            bytes.append(scanner.consume().underlying)
+            bytes.append(scanner.consume())
         }
     }
 
@@ -295,8 +290,7 @@ internal func _lexNumber(
     // Optional fraction.
     if let b: ASCII.Code = scanner.peek(), b == .period {
         isFloat = true
-        // AUDIT [.underlying]: numeric-byte accumulation.
-        bytes.append(scanner.consume().underlying)
+        bytes.append(scanner.consume())
         guard let firstFracDigit: ASCII.Code = scanner.peek(), firstFracDigit.isDigit else {
             throw .invalidNumber(
                 at: _position(at: startCursor, scanner: scanner),
@@ -304,19 +298,16 @@ internal func _lexNumber(
             )
         }
         while let code: ASCII.Code = scanner.peek(), code.isDigit {
-            // AUDIT [.underlying]: numeric-byte accumulation.
-            bytes.append(scanner.consume().underlying)
+            bytes.append(scanner.consume())
         }
     }
 
     // Optional exponent.
     if let e: ASCII.Code = scanner.peek(), e == .e || e == .E {
         isFloat = true
-        // AUDIT [.underlying]: numeric-byte accumulation.
-        bytes.append(scanner.consume().underlying)
+        bytes.append(scanner.consume())
         if let sign: ASCII.Code = scanner.peek(), sign == .plusSign || sign == .hyphen {
-            // AUDIT [.underlying]: numeric-byte accumulation.
-            bytes.append(scanner.consume().underlying)
+            bytes.append(scanner.consume())
         }
         guard let firstExpDigit: ASCII.Code = scanner.peek(), firstExpDigit.isDigit else {
             throw .invalidNumber(
@@ -325,20 +316,21 @@ internal func _lexNumber(
             )
         }
         while let code: ASCII.Code = scanner.peek(), code.isDigit {
-            // AUDIT [.underlying]: numeric-byte accumulation.
-            bytes.append(scanner.consume().underlying)
+            bytes.append(scanner.consume())
         }
     }
 
     let span = bytes.span
-    let byteArray: [UInt8] = .init(unsafeUninitializedCapacity: span.count) { dst, initialized in
+    // Build [Byte] for Number.Original; UInt8 mirror for stdlib's
+    // Double(_:String) / Int64.init(_:String) at the numStr stdlib edge.
+    let byteArray: [Byte] = .init(unsafeUninitializedCapacity: span.count) { dst, initialized in
         for i in 0..<span.count {
             dst[i] = span[i]
         }
         initialized = span.count
     }
     let original = RFC_8259.Number.Original(byteArray)
-    let numStr = String(decoding: byteArray, as: UTF8.self)
+    let numStr = String(decoding: byteArray.lazy.map(\.underlying), as: UTF8.self)
 
     if isFloat {
         guard let value = Double(numStr), value.isFinite else {

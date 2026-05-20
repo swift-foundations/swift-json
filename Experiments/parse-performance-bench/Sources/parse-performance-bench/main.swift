@@ -261,7 +261,7 @@ print("iterations: \(iters), mode: \(mode)")
 print("")
 
 let stringForm: String = String(decoding: data, as: UTF8.self)
-let bytesForm: [UInt8] = .init(data)
+let bytesForm: [Byte] = data.map(Byte.init)
 print("prepared String + [UInt8] forms")
 print("")
 
@@ -773,7 +773,7 @@ if mode == "codable-lookup-event-grain" {
     print("=== A2 axis (b): default-fallback non-regression probe ===")
     print("Tiny JSON {\"name\":\"x\",\"age\":1}; 100 000 iters; both paths.")
     let probeJSON = #"{"name":"Alice","age":30}"#
-    let probeBytes: [UInt8] = Swift.Array(probeJSON.utf8)
+    let probeBytes: [Byte] = probeJSON.utf8.map(Byte.init)
     let probeIters = 100_000
 
     do {

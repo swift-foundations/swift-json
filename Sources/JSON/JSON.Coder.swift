@@ -69,7 +69,7 @@ extension JSON {
 // MARK: - Coder.Protocol conformance
 
 extension JSON.Coder: Coder_Primitives.Coder.`Protocol` {
-    public typealias Input   = Swift.Span<UInt8>
+    public typealias Input   = Swift.Span<Byte>
     public typealias Buffer  = [UInt8]
     public typealias Output  = RFC_8259.Value
     public typealias Failure = Either<RFC_8259.Error, JSON.Encode.Error>
@@ -86,7 +86,7 @@ extension JSON.Coder: Coder_Primitives.Coder.`Protocol` {
     /// the unified `Failure` type.
     @inlinable
     public func parse(
-        _ input: inout Swift.Span<UInt8>
+        _ input: inout Swift.Span<Byte>
     ) throws(Failure) -> RFC_8259.Value {
         let value: RFC_8259.Value
         do {

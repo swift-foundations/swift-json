@@ -190,7 +190,7 @@ extension JSON.Serializable {
     /// - Throws: `JSON.Error` if parsing or deserialization fails.
     @inlinable
     public init<Bytes>(jsonBytes: Bytes) throws(JSON.Error)
-    where Bytes: Swift.Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
+    where Bytes: Swift.Collection<Byte>, Bytes: Sendable, Bytes.Index: Sendable {
         let json = try JSON.parse(jsonBytes)
         self = try Self.deserialize(json)
     }
@@ -216,11 +216,11 @@ extension JSON.Serializable {
     /// - Throws: `JSON.Error` if parsing or deserialization fails.
     @inlinable
     public static func from<Bytes>(eventDecodingJsonBytes bytes: Bytes) throws(JSON.Error) -> Self
-    where Bytes: Swift.Collection<UInt8>, Bytes: Sendable, Bytes.Index: Sendable {
+    where Bytes: Swift.Collection<Byte>, Bytes: Sendable, Bytes.Index: Sendable {
         // Fast path: contiguous storage → Span cursor.
         var parserError: JSON.Error? = nil
         let fastResult: Self? = bytes.withContiguousStorageIfAvailable {
-            (buffer: UnsafeBufferPointer<UInt8>) -> Self? in
+            (buffer: UnsafeBufferPointer<Byte>) -> Self? in
             let span = buffer.span
             var stream = JSON.Span.EventStream(span)
             do {
@@ -235,7 +235,7 @@ extension JSON.Serializable {
         } ?? nil
         if let value = fastResult { return value }
         if let err = parserError { throw err }
-        // Slow path: arbitrary Collection<UInt8>.
+        // Slow path: arbitrary Collection<Byte>.
         let array = Swift.Array(bytes)
         var slowError: JSON.Error? = nil
         let result: Self? = array.withUnsafeBufferPointer { buffer -> Self? in
