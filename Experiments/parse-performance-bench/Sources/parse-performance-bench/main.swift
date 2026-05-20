@@ -12,6 +12,7 @@ import Foundation
 import JSON
 import Dictionary_Ordered_Primitives
 import Hash_Primitives
+import ASCII_Decimal_Parser_Primitives
 
 // MARK: - Schema for codable-lookup mode
 //
@@ -201,6 +202,44 @@ func pad(_ s: String, _ n: Int) -> String {
 
 func report(_ label: String, _ seconds: Double) {
     print("\(pad(label, 50)) \(String(format: "%8.3f", seconds))s")
+}
+
+// MARK: - Stats helpers (stats + float-microbench modes)
+
+struct Stats {
+    let min: Double
+    let median: Double
+    let p90: Double
+    let mean: Double
+}
+
+func computeStats(_ samples: [Double]) -> Stats {
+    precondition(!samples.isEmpty, "computeStats requires at least one sample")
+    let sorted = samples.sorted()
+    let n = sorted.count
+    let minVal = sorted[0]
+    let median = n % 2 == 0
+        ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
+        : sorted[n / 2]
+    let p90Idx = Swift.min(Int((Double(n) * 0.9).rounded(.down)), n - 1)
+    let p90 = sorted[p90Idx]
+    let mean = samples.reduce(0.0, +) / Double(n)
+    return Stats(min: minVal, median: median, p90: p90, mean: mean)
+}
+
+/// Apple's NewCodable methodology: small warmup excludes cold-cache + JIT-ish
+/// effects; MIN-of-N is the canonical low-noise summary. Default warmup
+/// scales with N but is clamped to [8, 32].
+func warmupCount(for iters: Int) -> Int {
+    return Swift.max(8, Swift.min(32, iters / 16))
+}
+
+func reportStat(_ label: String, _ stats: Stats, unit: String, fmt: String = "%10.3f") {
+    print("    \(pad("min", 10)) \(String(format: fmt, stats.min)) \(unit)")
+    print("    \(pad("median", 10)) \(String(format: fmt, stats.median)) \(unit)")
+    print("    \(pad("p90", 10)) \(String(format: fmt, stats.p90)) \(unit)")
+    print("    \(pad("mean", 10)) \(String(format: fmt, stats.mean)) \(unit)")
+    _ = label
 }
 
 let args = CommandLine.arguments
@@ -897,6 +936,273 @@ if mode == "equiv" {
         print("  Foundation: \(fnPaths)")
         print("  match: \(sjPaths == fnPaths && !sjPaths.isEmpty)")
     }
+}
+
+// STATS mode: MIN/median/p90/mean per-iter, Foundation + swift-json bytes
+// back-to-back. Apple's NewCodable methodology — MIN-of-N + warmup is
+// canonical low-noise. Reports ms/iter for each parser and the ratio
+// (swift-json / Foundation) at each statistic.
+if mode == "stats" {
+    let warmup = warmupCount(for: iters)
+    print("=== STATS: per-iter Foundation vs swift-json (bytes path) ===")
+    print("Methodology: MIN/median/p90/mean across \(iters) measured iters; \(warmup) warmup iters.")
+    print("")
+
+    // Foundation: warmup
+    for _ in 0..<warmup {
+        _ = try JSONSerialization.jsonObject(with: data, options: [])
+    }
+    // Foundation: measured
+    var foundationSamples: [Double] = []
+    foundationSamples.reserveCapacity(iters)
+    for _ in 0..<iters {
+        let t0 = mono()
+        _ = try JSONSerialization.jsonObject(with: data, options: [])
+        let t1 = mono()
+        foundationSamples.append((t1 - t0) * 1000.0)
+    }
+    let foundationStats = computeStats(foundationSamples)
+
+    // swift-json: warmup
+    for _ in 0..<warmup {
+        _ = try JSON.parse(bytesForm)
+    }
+    // swift-json: measured
+    var sjSamples: [Double] = []
+    sjSamples.reserveCapacity(iters)
+    for _ in 0..<iters {
+        let t0 = mono()
+        _ = try JSON.parse(bytesForm)
+        let t1 = mono()
+        sjSamples.append((t1 - t0) * 1000.0)
+    }
+    let sjStats = computeStats(sjSamples)
+
+    print("Foundation.JSONSerialization.jsonObject(with:) — ms/iter:")
+    reportStat("Foundation", foundationStats, unit: "ms")
+    print("")
+    print("swift-json JSON.parse([UInt8]) — ms/iter:")
+    reportStat("swift-json", sjStats, unit: "ms")
+    print("")
+    print("Ratio swift-json / Foundation:")
+    print("    \(pad("min", 10)) \(String(format: "%10.2fx", sjStats.min / foundationStats.min))")
+    print("    \(pad("median", 10)) \(String(format: "%10.2fx", sjStats.median / foundationStats.median))")
+    print("    \(pad("p90", 10)) \(String(format: "%10.2fx", sjStats.p90 / foundationStats.p90))")
+    print("    \(pad("mean", 10)) \(String(format: "%10.2fx", sjStats.mean / foundationStats.mean))")
+}
+
+// FLOAT-MICROBENCH mode: per-call comparison of the EL float parser
+// (`ASCII.Decimal.Float.parse(_: borrowing Swift.Span<UInt8>)`) against
+// stdlib `Double(_: String)`. Scans the input for float tokens (numbers
+// containing `.`, `e`, or `E` — the production set that `lexNumberValue`
+// routes through EL), verifies bit-pattern agreement, then times both
+// per-call across N iters with warmup. Authoritative empirical test for
+// the v1.1.0 canada-anomaly tree-shape claim.
+if mode == "float-microbench" {
+    let warmup = warmupCount(for: iters)
+    print("=== FLOAT-MICROBENCH: per-call EL parser vs Double(_: String) ===")
+    print("Source tokens: float-shaped numbers in input (containing '.', 'e', or 'E').")
+    print("")
+
+    // Scan for float tokens. State machine tracks JSON string scope so
+    // we never pick up digits embedded inside string literals.
+    var tokens: [(start: Int, count: Int)] = []
+    tokens.reserveCapacity(150_000)
+    do {
+        var i = 0
+        let n = bytesForm.count
+        var inString = false
+        var escaped = false
+        while i < n {
+            let b = bytesForm[i]
+            if escaped { escaped = false; i &+= 1; continue }
+            if inString {
+                if b == 0x5C { escaped = true; i &+= 1; continue }
+                if b == 0x22 { inString = false; i &+= 1; continue }
+                i &+= 1; continue
+            }
+            if b == 0x22 { inString = true; i &+= 1; continue }
+            let isMinus = b == 0x2D
+            let isDigit = b >= 0x30 && b <= 0x39
+            if isMinus || isDigit {
+                let start = i
+                var sawDot = false
+                var sawExp = false
+                if isMinus { i &+= 1 }
+                while i < n {
+                    let c = bytesForm[i]
+                    let cIsDigit = c >= 0x30 && c <= 0x39
+                    if cIsDigit { i &+= 1; continue }
+                    if c == 0x2E { sawDot = true; i &+= 1; continue }
+                    if c == 0x65 || c == 0x45 {
+                        sawExp = true
+                        i &+= 1
+                        if i < n {
+                            let s = bytesForm[i]
+                            if s == 0x2D || s == 0x2B { i &+= 1 }
+                        }
+                        continue
+                    }
+                    break
+                }
+                let count = i &- start
+                if (sawDot || sawExp) && count > 0 {
+                    tokens.append((start: start, count: count))
+                }
+                continue
+            }
+            i &+= 1
+        }
+    }
+    let tokenCount = tokens.count
+    print("Float tokens collected: \(tokenCount)")
+    if tokenCount == 0 {
+        print("(no float tokens in input — float-microbench is meaningless)")
+    } else {
+        print("Mean token length: \(String(format: "%.2f", Double(tokens.reduce(0) { $0 + $1.count }) / Double(tokenCount))) bytes")
+    }
+    print("")
+
+    // Bit-equivalence verification: each token's EL parse must agree
+    // with `Double(_: String)` in raw bitPattern.
+    var mismatches = 0
+    var firstMismatchToken: String? = nil
+    var firstMismatchEL: Double = 0
+    var firstMismatchStdlib: Double? = nil
+    do {
+        let wholeSpan = bytesForm.span
+        for tok in tokens {
+            let tokenSpan = wholeSpan.extracting(tok.start..<(tok.start &+ tok.count))
+            let dEL: Double
+            do {
+                dEL = try ASCII.Decimal.Float.parse(tokenSpan)
+            } catch {
+                mismatches &+= 1
+                if firstMismatchToken == nil {
+                    firstMismatchToken = String(decoding: bytesForm[tok.start..<(tok.start &+ tok.count)], as: UTF8.self)
+                    firstMismatchEL = .nan
+                    firstMismatchStdlib = nil
+                }
+                continue
+            }
+            let strForm = String(decoding: bytesForm[tok.start..<(tok.start &+ tok.count)], as: UTF8.self)
+            let dStdlib = Double(strForm)
+            if dEL.bitPattern != (dStdlib?.bitPattern ?? 0) || dStdlib == nil {
+                mismatches &+= 1
+                if firstMismatchToken == nil {
+                    firstMismatchToken = strForm
+                    firstMismatchEL = dEL
+                    firstMismatchStdlib = dStdlib
+                }
+            }
+        }
+    }
+    print("Bit-pattern verification: \(mismatches) mismatch\(mismatches == 1 ? "" : "es") across \(tokenCount) tokens.")
+    if let tok = firstMismatchToken {
+        print("  First mismatch: token=\(tok)  EL=\(firstMismatchEL)  stdlib=\(firstMismatchStdlib.map(String.init(describing:)) ?? "<nil>")")
+    }
+    print("")
+
+    guard tokenCount > 0 else {
+        print("Skipping timing pass (no float tokens).")
+        print("")
+        print("done.")
+        exit(0)
+    }
+
+    // Pre-materialise String forms so the stdlib loop times only
+    // `Double(_: String)`, not the String allocation. EL loop times
+    // only `ASCII.Decimal.Float.parse` — the span construction
+    // (extracting an `~Escapable` Span from a parent Span) is the
+    // production hot path's shape, matching `lexNumberValue`'s
+    // `let span = bytes.span` then call.
+    let tokenStrings: [String] = tokens.map {
+        String(decoding: bytesForm[$0.start..<($0.start &+ $0.count)], as: UTF8.self)
+    }
+
+    print("Timing: \(warmup) warmup iters + \(iters) measured iters; per-iter walks all \(tokenCount) tokens.")
+    print("")
+
+    // EL: warmup
+    do {
+        let wholeSpan = bytesForm.span
+        for _ in 0..<warmup {
+            var sink: UInt64 = 0
+            for tok in tokens {
+                let s = wholeSpan.extracting(tok.start..<(tok.start &+ tok.count))
+                let d = (try? ASCII.Decimal.Float.parse(s)) ?? 0
+                sink = sink &+ d.bitPattern
+            }
+            if sink == 0 { print("(DCE EL warmup)") }
+        }
+    }
+    // EL: measured
+    var elSamples: [Double] = []
+    elSamples.reserveCapacity(iters)
+    do {
+        let wholeSpan = bytesForm.span
+        for _ in 0..<iters {
+            var sink: UInt64 = 0
+            let t0 = mono()
+            for tok in tokens {
+                let s = wholeSpan.extracting(tok.start..<(tok.start &+ tok.count))
+                let d = (try? ASCII.Decimal.Float.parse(s)) ?? 0
+                sink = sink &+ d.bitPattern
+            }
+            let t1 = mono()
+            if sink == 0 { print("(DCE EL)") }
+            // ns per call = (seconds per iter * 1e9) / tokens-per-iter
+            elSamples.append((t1 - t0) * 1e9 / Double(tokenCount))
+        }
+    }
+    let elStats = computeStats(elSamples)
+
+    // Stdlib: warmup
+    for _ in 0..<warmup {
+        var sink: UInt64 = 0
+        for s in tokenStrings {
+            let d = Double(s) ?? 0
+            sink = sink &+ d.bitPattern
+        }
+        if sink == 0 { print("(DCE stdlib warmup)") }
+    }
+    // Stdlib: measured
+    var stdSamples: [Double] = []
+    stdSamples.reserveCapacity(iters)
+    for _ in 0..<iters {
+        var sink: UInt64 = 0
+        let t0 = mono()
+        for s in tokenStrings {
+            let d = Double(s) ?? 0
+            sink = sink &+ d.bitPattern
+        }
+        let t1 = mono()
+        if sink == 0 { print("(DCE stdlib)") }
+        stdSamples.append((t1 - t0) * 1e9 / Double(tokenCount))
+    }
+    let stdStats = computeStats(stdSamples)
+
+    print("ASCII.Decimal.Float.parse — ns/call:")
+    reportStat("EL", elStats, unit: "ns")
+    print("")
+    print("Double(_: String) — ns/call:")
+    reportStat("stdlib", stdStats, unit: "ns")
+    print("")
+    print("Ratio stdlib / EL (>1 = EL faster):")
+    print("    \(pad("min", 10)) \(String(format: "%10.2fx", stdStats.min / elStats.min))")
+    print("    \(pad("median", 10)) \(String(format: "%10.2fx", stdStats.median / elStats.median))")
+    print("    \(pad("p90", 10)) \(String(format: "%10.2fx", stdStats.p90 / elStats.p90))")
+    print("    \(pad("mean", 10)) \(String(format: "%10.2fx", stdStats.mean / elStats.mean))")
+    print("")
+    print("Wall-clock-savings ceiling (per parse) = N × (t_stdlib − t_EL):")
+    print("  min-vs-min:   \(String(format: "%8.2f ms", Double(tokenCount) * (stdStats.min - elStats.min) / 1_000_000.0))")
+    print("  median-vs-median: \(String(format: "%8.2f ms", Double(tokenCount) * (stdStats.median - elStats.median) / 1_000_000.0))")
+    print("  mean-vs-mean: \(String(format: "%8.2f ms", Double(tokenCount) * (stdStats.mean - elStats.mean) / 1_000_000.0))")
+    print("")
+    print("Phase 3 adjudication input (per parse-performance-canada-anomaly.md v1.1.0):")
+    print("  t_EL ≥ 3× t_stdlib AND savings-ceiling ≪ 220 ms → VALIDATED (tree-shape dominates)")
+    print("  t_EL ≲ t_stdlib OR savings-ceiling ≥ 100 ms → REFUTED (EL slow OR room for further float speedup)")
+    print("  In between → MIXED")
 }
 
 print("")

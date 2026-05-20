@@ -21,6 +21,14 @@
 //   sanity    - parse + traversal + assertion (proves real work; not noise)
 //   equiv     - deep tree-equivalence check across 7 fields vs Foundation
 //               (proves identical output structure across both parsers)
+//   stats     - MIN/median/p90/mean per-iter across N iters with warmup
+//               (Foundation + swift-json bytes path back-to-back).
+//               MIN-of-N + warmup is Apple's NewCodable methodology.
+//   float-microbench - per-call EL parser vs `Double(_: String)` on real
+//               canada float tokens. Bit-equivalence check + per-call
+//               ns MIN/median/p90/mean across N iters with warmup.
+//               Authoritative empirical test for v1.1.0 canada-anomaly
+//               tree-shape claim (parse-performance-canada-anomaly.md).
 //
 // ## Invocation
 //
@@ -48,7 +56,8 @@ let package = Package(
     dependencies: [
         .package(path: "../.."),
         .package(path: "../../../../swift-primitives/swift-dictionary-primitives"),
-        .package(path: "../../../../swift-primitives/swift-hash-primitives")
+        .package(path: "../../../../swift-primitives/swift-hash-primitives"),
+        .package(path: "../../../../swift-primitives/swift-ascii-parser-primitives")
     ],
     targets: [
         .executableTarget(
@@ -56,7 +65,8 @@ let package = Package(
             dependencies: [
                 .product(name: "JSON", package: "swift-json"),
                 .product(name: "Dictionary Ordered Primitives", package: "swift-dictionary-primitives"),
-                .product(name: "Hash Primitives", package: "swift-hash-primitives")
+                .product(name: "Hash Primitives", package: "swift-hash-primitives"),
+                .product(name: "ASCII Decimal Parser Primitives", package: "swift-ascii-parser-primitives")
             ]
         )
     ]
