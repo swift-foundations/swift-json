@@ -1205,5 +1205,371 @@ if mode == "float-microbench" {
     print("  In between → MIXED")
 }
 
+// TREE-MICROBENCH mode: decompose the residual ~233 ms canada tree-emit
+// cost into three components:
+//
+//   (1) alloc    — per-`RFC_8259.Value.number(...)` construction cost.
+//                  Time the construction of `RFC_8259.Value.number(
+//                  RFC_8259.Number(0.0, original: .init(span)))` per
+//                  real canada Number span, no parse, no scan, no
+//                  storage. Pure enum-init + Number + Original cost.
+//   (2) grow     — `[RFC_8259.Value].append` cost at canada's actual
+//                  array-size distribution. Walk the live tree once
+//                  to harvest the per-array element counts; in the
+//                  measured loop, allocate fresh `[RFC_8259.Value]`s
+//                  (with the production `reserveCapacity(4)` hint per
+//                  Patch 2) and append `.null` to each at its target
+//                  size. Captures array-doubling + ARC traffic on
+//                  fresh storage.
+//   (3) teardown — `outlined destroy of RFC_8259.Value` recursive
+//                  release cost. Parse canada once into a holder
+//                  Optional, then per iter time the `holder = nil`
+//                  assignment that triggers the full tree drop. The
+//                  pre-iter re-parse rebuilds the tree for the next
+//                  measurement.
+//
+// Each component runs under the standard 16 warmup + N measured iters
+// methodology. Per-iter total reported in ms (MIN/median/p90/mean).
+//
+// Sanity bound: alloc + grow + teardown should approximate the canada
+// parse cost minus the lex floor (~10–20 ms). If the components sum to
+// <50 % of the measured parse cost, flag the missing-component
+// blind spot; if >120 %, flag over-attribution (component bench costs
+// inflate compared to in-context production cost).
+//
+// Adjudication: drives Path A (allocation-heavy) vs Path B (teardown-
+// heavy) vs array-targeted fix (grow-heavy) — the next architectural
+// gate per parse-performance-canada-anomaly.md v1.2.0's "Next arc must
+// target tree shape".
+if mode == "tree-microbench" {
+    let warmup = warmupCount(for: iters)
+    print("=== TREE-MICROBENCH: decompose canada tree-emit residual ===")
+    print("Components: (1) per-Value alloc, (2) intermediate array growth, (3) tree teardown.")
+    print("Methodology: MIN/median/p90/mean across \(iters) measured iters; \(warmup) warmup iters.")
+    print("")
+
+    // -- Harvest 1: ALL number tokens (float + integer-shaped).
+    // Mirrors the float-microbench scanner without the `sawDot || sawExp`
+    // filter — captures every JSON number literal in the input so the
+    // alloc-cost loop runs on production-shaped spans.
+    var numberTokens: [(start: Int, count: Int)] = []
+    numberTokens.reserveCapacity(150_000)
+    do {
+        var i = 0
+        let n = bytesForm.count
+        var inString = false
+        var escaped = false
+        while i < n {
+            let b = bytesForm[i]
+            if escaped { escaped = false; i &+= 1; continue }
+            if inString {
+                if b == 0x5C { escaped = true; i &+= 1; continue }
+                if b == 0x22 { inString = false; i &+= 1; continue }
+                i &+= 1; continue
+            }
+            if b == 0x22 { inString = true; i &+= 1; continue }
+            let isMinus = b == 0x2D
+            let isDigit = b >= 0x30 && b <= 0x39
+            if isMinus || isDigit {
+                let start = i
+                if isMinus { i &+= 1 }
+                while i < n {
+                    let c = bytesForm[i]
+                    let cIsDigit = c >= 0x30 && c <= 0x39
+                    if cIsDigit { i &+= 1; continue }
+                    if c == 0x2E { i &+= 1; continue }
+                    if c == 0x65 || c == 0x45 {
+                        i &+= 1
+                        if i < n {
+                            let s = bytesForm[i]
+                            if s == 0x2D || s == 0x2B { i &+= 1 }
+                        }
+                        continue
+                    }
+                    break
+                }
+                let count = i &- start
+                if count > 0 {
+                    numberTokens.append((start: start, count: count))
+                }
+                continue
+            }
+            i &+= 1
+        }
+    }
+    let numberCount = numberTokens.count
+    print("Number tokens collected: \(numberCount)")
+    if numberCount == 0 {
+        print("(no number tokens in input — tree-microbench is meaningless)")
+        print("done.")
+        exit(0)
+    }
+    let meanNumLen = Double(numberTokens.reduce(0) { $0 + $1.count }) / Double(numberCount)
+    print("Mean number token length: \(String(format: "%.2f", meanNumLen)) bytes")
+    print("")
+
+    // -- Harvest 2: array-size distribution.
+    // Parse canada once; walk the tree gathering the count of
+    // elements per array. The grow loop replays this distribution.
+    // Uses JSON.Decode.parse which surfaces RFC_8259.Value directly.
+    let harvestRoot: RFC_8259.Value = try JSON.Decode.parse(bytesForm)
+    var arraySizes: [Int] = []
+    arraySizes.reserveCapacity(60_000)
+    func collectArraySizes(_ v: RFC_8259.Value) {
+        switch v {
+        case .array(let a):
+            arraySizes.append(a.count)
+            for child in a { collectArraySizes(child) }
+        case .object(let o):
+            for (_, child) in o { collectArraySizes(child) }
+        default:
+            break
+        }
+    }
+    collectArraySizes(harvestRoot)
+    let arrayCount = arraySizes.count
+    let totalAppends = arraySizes.reduce(0, +)
+    print("Array nodes collected: \(arrayCount)")
+    print("Total appends across all arrays: \(totalAppends)")
+    if arrayCount > 0 {
+        let meanSize = Double(totalAppends) / Double(arrayCount)
+        print("Mean array size: \(String(format: "%.2f", meanSize)) elements")
+        // Compact distribution summary.
+        var hist: [Int: Int] = [:]
+        for s in arraySizes { hist[s, default: 0] &+= 1 }
+        let sortedSizes = hist.keys.sorted()
+        let topSizes = sortedSizes.prefix(8)
+        let dist = topSizes.map { "\($0)→\(hist[$0]!)" }.joined(separator: " ")
+        print("Top sizes (size→count): \(dist) ...")
+    }
+    print("")
+
+    // Reference: full swift-json parse cost on this machine (single
+    // measurement, for sanity-bound comparison). Re-uses warmup +
+    // MIN-of-N on the same iter budget.
+    print("Reference: full swift-json parse cost ...")
+    for _ in 0..<warmup {
+        _ = try JSON.parse(bytesForm)
+    }
+    var parseSamples: [Double] = []
+    parseSamples.reserveCapacity(iters)
+    for _ in 0..<iters {
+        let t0 = mono()
+        _ = try JSON.parse(bytesForm)
+        let t1 = mono()
+        parseSamples.append((t1 - t0) * 1000.0)
+    }
+    let parseStats = computeStats(parseSamples)
+    reportStat("parse", parseStats, unit: "ms")
+    print("")
+
+    // ------------------------------------------------------------------
+    // (1) ALLOC — per-Value.number(...) construction
+    //
+    // Builds `RFC_8259.Value.number(RFC_8259.Number(value: 0.0,
+    // original: RFC_8259.Number.Original(span)))` per real canada
+    // Number span. Uses a fixed `value=0.0` to factor out the float-
+    // parse cost (covered by float-microbench) — this isolates the
+    // alloc + enum-construction surface.
+    print("(1) ALLOC — per-Value.number(Number(value, original)) construction")
+    do {
+        let wholeSpan = bytesForm.span
+        // Warmup
+        for _ in 0..<warmup {
+            var sink: UInt64 = 0
+            for tok in numberTokens {
+                let s = wholeSpan.extracting(tok.start..<(tok.start &+ tok.count))
+                let original = RFC_8259.Number.Original(s)
+                let number = RFC_8259.Number(0.0, original: original)
+                let value: RFC_8259.Value = .number(number)
+                // Touch a field to defeat DCE without doing extra work.
+                if case .number(let n) = value { sink = sink &+ UInt64(n.original.bytes.count) }
+            }
+            if sink == 0 { print("(DCE alloc warmup)") }
+        }
+        // Measured
+        var allocSamples: [Double] = []
+        allocSamples.reserveCapacity(iters)
+        for _ in 0..<iters {
+            var sink: UInt64 = 0
+            let t0 = mono()
+            for tok in numberTokens {
+                let s = wholeSpan.extracting(tok.start..<(tok.start &+ tok.count))
+                let original = RFC_8259.Number.Original(s)
+                let number = RFC_8259.Number(0.0, original: original)
+                let value: RFC_8259.Value = .number(number)
+                if case .number(let n) = value { sink = sink &+ UInt64(n.original.bytes.count) }
+            }
+            let t1 = mono()
+            if sink == 0 { print("(DCE alloc)") }
+            allocSamples.append((t1 - t0) * 1000.0)
+        }
+        let allocStats = computeStats(allocSamples)
+        reportStat("alloc", allocStats, unit: "ms")
+        let perValueNS = allocStats.min * 1_000_000.0 / Double(numberCount)
+        print("    per-Value (min): \(String(format: "%.2f", perValueNS)) ns/Value")
+        print("")
+
+        // ----------------------------------------------------------------
+        // (2) GROW — intermediate-array append at canada's size distribution.
+        //
+        // Mirrors production's post-Patch-2 `parseArray` hot path: for
+        // each array node observed in canada, allocate a fresh
+        // `[RFC_8259.Value]`, apply `reserveCapacity(4)` (the live patch
+        // since 2026-05-19), then append `.null` up to the target size.
+        // Captures the `Swift.Array` doubling + ARC traffic on fresh
+        // storage. Doesn't include the cost of materialising the inner
+        // Values (covered separately by alloc).
+        print("(2) GROW — fresh-array allocation + append at canada size distribution")
+        // Warmup
+        for _ in 0..<warmup {
+            var sink: Int = 0
+            for size in arraySizes {
+                var elements: [RFC_8259.Value] = []
+                elements.reserveCapacity(4)
+                for _ in 0..<size { elements.append(.null) }
+                sink &+= elements.count
+            }
+            if sink == 0 { print("(DCE grow warmup)") }
+        }
+        // Measured
+        var growSamples: [Double] = []
+        growSamples.reserveCapacity(iters)
+        for _ in 0..<iters {
+            var sink: Int = 0
+            let t0 = mono()
+            for size in arraySizes {
+                var elements: [RFC_8259.Value] = []
+                elements.reserveCapacity(4)
+                for _ in 0..<size { elements.append(.null) }
+                sink &+= elements.count
+            }
+            let t1 = mono()
+            if sink == 0 { print("(DCE grow)") }
+            growSamples.append((t1 - t0) * 1000.0)
+        }
+        let growStats = computeStats(growSamples)
+        reportStat("grow", growStats, unit: "ms")
+        let perAppendNS = growStats.min * 1_000_000.0 / Double(totalAppends == 0 ? 1 : totalAppends)
+        print("    per-append (min): \(String(format: "%.2f", perAppendNS)) ns/append")
+        print("")
+
+        // ----------------------------------------------------------------
+        // (3) TEARDOWN — `outlined destroy of RFC_8259.Value` recursive
+        // release. Per iter: rebuild the tree (cost factored OUT of the
+        // measurement window), then time the holder = nil assignment
+        // that triggers the recursive ARC drop.
+        // The naive `var holder: Value? = parse(); t0; holder = nil; t1`
+        // returns ~0 because the optimizer (a) sinks the destroy past
+        // `t1` since `holder` is dead after the assignment, OR (b)
+        // hoists work into the parse phase. Two defenses:
+        //   1. Use `Swift.withExtendedLifetime` to bind the tree's
+        //      lifetime to a closure scope and force the destroy to
+        //      happen at scope exit, between t0 and t1.
+        //   2. Take a `Swift.Hasher` snapshot of a tree leaf before
+        //      t0 and combine into a sink AFTER t1 to defeat dead-
+        //      store elimination on the parse side.
+        // Pattern: bind `tree` to a local Optional, snapshot a cheap
+        // observable (`isObject`) into sink BEFORE t0, set t0, drop
+        // tree by reassigning to `.null` (a value-type "drop"), set
+        // t1. The reassignment forces destroy of the previous tree.
+        print("(3) TEARDOWN — recursive RFC_8259.Value destroy via reassignment")
+        var globalSink: Int = 0
+        // Warmup
+        for _ in 0..<warmup {
+            var tree: RFC_8259.Value = try JSON.Decode.parse(bytesForm)
+            // Observe pre-drop to prevent parse hoisting.
+            globalSink &+= tree.array?.count ?? 0
+            // Drop by reassignment to a trivial value (destroys the previous).
+            tree = .null
+            // Observe post-drop to prevent tree dropping into a no-op.
+            globalSink &+= (tree.isNull ? 1 : 0)
+        }
+        // Measured
+        var teardownSamples: [Double] = []
+        teardownSamples.reserveCapacity(iters)
+        for _ in 0..<iters {
+            // Rebuild tree (cost factored OUT of the timed window).
+            var tree: RFC_8259.Value = try JSON.Decode.parse(bytesForm)
+            // Pre-timing observation: forces parse to complete before t0.
+            globalSink &+= tree.array?.count ?? 0
+            // Time the drop via reassignment.
+            let t0 = mono()
+            tree = .null
+            let t1 = mono()
+            // Post-timing observation: prevents reassignment elision.
+            globalSink &+= (tree.isNull ? 1 : 0)
+            teardownSamples.append((t1 - t0) * 1000.0)
+        }
+        if globalSink == 0 { print("(DCE teardown)") }
+        let teardownStats = computeStats(teardownSamples)
+        reportStat("teardown", teardownStats, unit: "ms")
+        print("")
+
+        // ----------------------------------------------------------------
+        // Decomposition summary.
+        let totalComponent = allocStats.min + growStats.min + teardownStats.min
+        let parseFloor = parseStats.min
+        let totalRatio = totalComponent / parseFloor
+
+        print("=== DECOMPOSITION ===")
+        print("Per-iter MIN (ms):")
+        print("    alloc      = \(String(format: "%8.2f", allocStats.min))    \(String(format: "%5.1f", 100.0 * allocStats.min / parseFloor))% of parse-floor")
+        print("    grow       = \(String(format: "%8.2f", growStats.min))    \(String(format: "%5.1f", 100.0 * growStats.min / parseFloor))% of parse-floor")
+        print("    teardown   = \(String(format: "%8.2f", teardownStats.min))    \(String(format: "%5.1f", 100.0 * teardownStats.min / parseFloor))% of parse-floor")
+        print("    --")
+        print("    sum        = \(String(format: "%8.2f", totalComponent))    \(String(format: "%5.1f", 100.0 * totalComponent / parseFloor))% of parse-floor")
+        print("    parse min  = \(String(format: "%8.2f", parseFloor))    (reference)")
+        print("    residual   = \(String(format: "%8.2f", parseFloor - totalComponent)) ms (lex + scaffolding + measurement noise)")
+        print("")
+
+        // Sanity bound: sum should be 50-120% of parse floor (typical
+        // case: lex floor ~10-20 ms, components ~210-230 ms, sum ratio
+        // ~0.85-0.95).
+        if totalRatio < 0.50 {
+            print("WARNING: components sum to \(String(format: "%.1f", totalRatio * 100))% of parse cost — < 50%.")
+            print("  Suggests a MISSING-COMPONENT blind spot (e.g. RFC_8259.Object growth,")
+            print("  or lex cost is larger than estimated, or one of the three components")
+            print("  measured here is structurally lighter than in production context).")
+        } else if totalRatio > 1.20 {
+            print("NOTE: components sum to \(String(format: "%.1f", totalRatio * 100))% of parse cost — > 120%.")
+            print("  Microbench likely double-counts work that production amortizes")
+            print("  (cache locality, fused allocations, etc.). Per-component ratios")
+            print("  remain valid for relative ranking; absolute attribution is upper-bound.")
+        } else {
+            print("Sanity check: components sum to \(String(format: "%.1f", totalRatio * 100))% of parse cost — within [50%, 120%].")
+        }
+        print("")
+
+        // Dominant component + path recommendation.
+        let components: [(name: String, ms: Double, path: String)] = [
+            (name: "alloc",    ms: allocStats.min,    path: "Path A (allocation-heavy: arena / pool / inline-enum)"),
+            (name: "grow",     ms: growStats.min,     path: "Array-targeted fix (size-prediction / chunked buffer / pre-reserve)"),
+            (name: "teardown", ms: teardownStats.min, path: "Path B (teardown-heavy: ~Copyable Value cascade / arena drop)")
+        ]
+        let sortedComps = components.sorted { $0.ms > $1.ms }
+        let dominant = sortedComps[0]
+        let second = sortedComps[1]
+        let third = sortedComps[2]
+        let dominantShare = dominant.ms / totalComponent
+
+        print("=== DOMINANT COMPONENT ===")
+        print("    1. \(dominant.name): \(String(format: "%5.1f", 100.0 * dominantShare))% of component sum")
+        print("    2. \(second.name): \(String(format: "%5.1f", 100.0 * second.ms / totalComponent))%")
+        print("    3. \(third.name): \(String(format: "%5.1f", 100.0 * third.ms / totalComponent))%")
+        print("")
+        print("Recommended next architectural lever:")
+        if dominantShare > 0.50 {
+            print("    \(dominant.path)")
+            print("    (>\(String(format: "%.0f", dominantShare * 100))% share — single-lever fix viable)")
+        } else {
+            print("    COMPOSITE — no single component dominates >50%.")
+            print("    Top contributors:")
+            print("      - \(dominant.path)")
+            print("      - \(second.path)")
+        }
+    }
+}
+
 print("")
 print("done.")

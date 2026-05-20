@@ -29,6 +29,14 @@
 //               ns MIN/median/p90/mean across N iters with warmup.
 //               Authoritative empirical test for v1.1.0 canada-anomaly
 //               tree-shape claim (parse-performance-canada-anomaly.md).
+//   tree-microbench - decomposes the residual canada tree-emit cost
+//               into three components: (1) per-Value alloc,
+//               (2) intermediate `[RFC_8259.Value].append` growth at
+//               canada's actual size distribution, (3) recursive
+//               tree teardown via holder = nil. Each component runs
+//               with the same warmup + MIN-of-N methodology. Drives
+//               the Path A / Path B / array-targeted-fix decision
+//               per parse-performance-canada-anomaly.md v1.3.0.
 //
 // ## Invocation
 //
