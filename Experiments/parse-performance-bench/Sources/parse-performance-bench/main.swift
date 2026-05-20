@@ -13,6 +13,8 @@ import JSON
 import Dictionary_Ordered_Primitives
 import Hash_Primitives
 import ASCII_Decimal_Parser_Primitives
+import Lexer_Primitives
+import ASCII_Primitives
 
 // MARK: - Schema for codable-lookup mode
 //
@@ -1568,6 +1570,300 @@ if mode == "tree-microbench" {
             print("      - \(dominant.path)")
             print("      - \(second.path)")
         }
+    }
+}
+
+// LEX-MICROBENCH mode: decomposes canada parse cost's residual (the ~96%
+// that tree-microbench surfaced as not-in-tree-emit) into three lex-layer
+// components measured directly against the production Lexer.Scanner:
+//
+//   (A) scanner-walk  — `scanner.consume()` over every byte until end.
+//                       Sum byte values to defeat DCE. Per-byte advance
+//                       cost (cursor + position tracker + byte read)
+//                       in isolation. Upper-bound for production's
+//                       cumulative scanner-advance traffic.
+//   (B) typed-dispatch — for every byte, `peek() as ASCII.Code` +
+//                       6-case switch mirroring parseValue's leading-
+//                       byte dispatch. Per-byte type-up + branch cost.
+//                       Production fires this once per Value node
+//                       (~333K times on canada); this measurement is
+//                       an UPPER bound because it walks every byte
+//                       rather than skipping inter-token bytes.
+//   (C) number-tokenize — replay lexNumberValue's peek-and-consume loop
+//                       on each canada Number token (harvested via the
+//                       same scanner pass tree-microbench uses).
+//                       Per-Number scanner overhead in isolation from
+//                       ASCII.Decimal.Float.parse + Number construction.
+//
+// Same MIN-of-N + warmup methodology as float-microbench and
+// tree-microbench. Drives the lex-layer-rework recommendation in
+// parse-performance-canada-anomaly.md v1.3.0.
+if mode == "lex-microbench" {
+    let warmup = warmupCount(for: iters)
+    let nBytes = bytesForm.count
+    print("=== LEX-MICROBENCH: decompose canada lex residual ===")
+    print("Components: (A) scanner advance, (B) typed-peek dispatch, (C) number-tokenize.")
+    print("Methodology: MIN/median/p90/mean across \(iters) measured iters; \(warmup) warmup iters.")
+    print("")
+    print("Input: \(nBytes) bytes (\(String(format: "%.2f", Double(nBytes) / 1048576.0)) MB).")
+
+    // Harvest Number token positions for component (C). Reuses the
+    // float-microbench's token-scanner shape, but accepts any number
+    // (integer-shaped or float-shaped) since lexNumberValue's peek-
+    // and-consume loop is uniform across both.
+    var numberTokens: [(start: Int, count: Int)] = []
+    numberTokens.reserveCapacity(150_000)
+    do {
+        var i = 0
+        let n = bytesForm.count
+        var inString = false
+        var escaped = false
+        while i < n {
+            let b = bytesForm[i]
+            if escaped { escaped = false; i &+= 1; continue }
+            if inString {
+                if b == 0x5C { escaped = true; i &+= 1; continue }
+                if b == 0x22 { inString = false; i &+= 1; continue }
+                i &+= 1; continue
+            }
+            if b == 0x22 { inString = true; i &+= 1; continue }
+            let isMinus = b == 0x2D
+            let isDigit = b >= 0x30 && b <= 0x39
+            if isMinus || isDigit {
+                let start = i
+                if isMinus { i &+= 1 }
+                while i < n {
+                    let c = bytesForm[i]
+                    let cIsDigit = c >= 0x30 && c <= 0x39
+                    if cIsDigit { i &+= 1; continue }
+                    if c == 0x2E { i &+= 1; continue }
+                    if c == 0x65 || c == 0x45 {
+                        i &+= 1
+                        if i < n {
+                            let s = bytesForm[i]
+                            if s == 0x2D || s == 0x2B { i &+= 1 }
+                        }
+                        continue
+                    }
+                    break
+                }
+                let count = i &- start
+                if count > 0 { numberTokens.append((start: start, count: count)) }
+                continue
+            }
+            i &+= 1
+        }
+    }
+    let nNumbers = numberTokens.count
+    print("Number tokens collected: \(nNumbers)")
+    print("Mean number-token length: \(String(format: "%.2f", Double(numberTokens.reduce(0) { $0 + $1.count }) / Double(nNumbers))) bytes")
+    print("")
+
+    // (A) SCANNER-WALK
+    print("(A) SCANNER-WALK — scanner.consume() over every byte")
+    do {
+        let span = bytesForm.span
+        for _ in 0..<warmup {
+            var scanner = Lexer.Scanner(span)
+            var sink: UInt64 = 0
+            while !scanner.isAtEnd {
+                sink = sink &+ UInt64(scanner.consume().underlying)
+            }
+            if sink == 0 { print("(DCE A warmup)") }
+        }
+    }
+    var advSamples: [Double] = []
+    advSamples.reserveCapacity(iters)
+    do {
+        let span = bytesForm.span
+        for _ in 0..<iters {
+            var scanner = Lexer.Scanner(span)
+            var sink: UInt64 = 0
+            let t0 = mono()
+            while !scanner.isAtEnd {
+                sink = sink &+ UInt64(scanner.consume().underlying)
+            }
+            let t1 = mono()
+            if sink == 0 { print("(DCE A)") }
+            advSamples.append((t1 - t0) * 1000.0)
+        }
+    }
+    let advStats = computeStats(advSamples)
+    reportStat("advance", advStats, unit: "ms")
+    print("    per-byte (min): \(String(format: "%.2f ns/byte", advStats.min * 1_000_000.0 / Double(nBytes)))")
+    print("")
+
+    // (B) TYPED-DISPATCH
+    print("(B) TYPED-DISPATCH — peek() as ASCII.Code + 6-case switch per byte")
+    do {
+        let span = bytesForm.span
+        for _ in 0..<warmup {
+            var scanner = Lexer.Scanner(span)
+            var sink: Int = 0
+            while !scanner.isAtEnd {
+                if let code: ASCII.Code = scanner.peek() {
+                    switch code {
+                    case .leftBrace, .leftBracket, .quotationMark, .n, .t, .f:
+                        sink &+= 1
+                    default:
+                        break
+                    }
+                }
+                scanner.advance()
+            }
+            if sink == 0 { print("(DCE B warmup)") }
+        }
+    }
+    var dispSamples: [Double] = []
+    dispSamples.reserveCapacity(iters)
+    do {
+        let span = bytesForm.span
+        for _ in 0..<iters {
+            var scanner = Lexer.Scanner(span)
+            var sink: Int = 0
+            let t0 = mono()
+            while !scanner.isAtEnd {
+                if let code: ASCII.Code = scanner.peek() {
+                    switch code {
+                    case .leftBrace, .leftBracket, .quotationMark, .n, .t, .f:
+                        sink &+= 1
+                    default:
+                        break
+                    }
+                }
+                scanner.advance()
+            }
+            let t1 = mono()
+            if sink == 0 { print("(DCE B)") }
+            dispSamples.append((t1 - t0) * 1000.0)
+        }
+    }
+    let dispStats = computeStats(dispSamples)
+    reportStat("dispatch", dispStats, unit: "ms")
+    print("    per-byte (min): \(String(format: "%.2f ns/byte", dispStats.min * 1_000_000.0 / Double(nBytes)))")
+    print("    (upper bound: production fires this once per Value node, ~333K times on canada)")
+    print("")
+
+    // (C) NUMBER-TOKENIZE
+    print("(C) NUMBER-TOKENIZE — lexNumberValue peek-and-consume replay per Number")
+    do {
+        let span = bytesForm.span
+        for _ in 0..<warmup {
+            var sink: Int = 0
+            for tok in numberTokens {
+                let sub = span.extracting(tok.start..<(tok.start &+ tok.count))
+                var scanner = Lexer.Scanner(sub)
+                var nb = 0
+                while !scanner.isAtEnd {
+                    guard let code: ASCII.Code = scanner.peek() else { break }
+                    if code.isDigit
+                        || code == .hyphen
+                        || code == .period
+                        || code == .e
+                        || code == .E
+                        || code == .plusSign {
+                        _ = scanner.consume()
+                        nb &+= 1
+                    } else {
+                        break
+                    }
+                }
+                sink &+= nb
+            }
+            if sink == 0 { print("(DCE C warmup)") }
+        }
+    }
+    var numSamples: [Double] = []
+    numSamples.reserveCapacity(iters)
+    do {
+        let span = bytesForm.span
+        for _ in 0..<iters {
+            var sink: Int = 0
+            let t0 = mono()
+            for tok in numberTokens {
+                let sub = span.extracting(tok.start..<(tok.start &+ tok.count))
+                var scanner = Lexer.Scanner(sub)
+                var nb = 0
+                while !scanner.isAtEnd {
+                    guard let code: ASCII.Code = scanner.peek() else { break }
+                    if code.isDigit
+                        || code == .hyphen
+                        || code == .period
+                        || code == .e
+                        || code == .E
+                        || code == .plusSign {
+                        _ = scanner.consume()
+                        nb &+= 1
+                    } else {
+                        break
+                    }
+                }
+                sink &+= nb
+            }
+            let t1 = mono()
+            if sink == 0 { print("(DCE C)") }
+            numSamples.append((t1 - t0) * 1000.0)
+        }
+    }
+    let numStats = computeStats(numSamples)
+    reportStat("num-tok", numStats, unit: "ms")
+    print("    per-token (min): \(String(format: "%.2f ns/token", numStats.min * 1_000_000.0 / Double(nNumbers)))")
+    print("")
+
+    // Reference parse cost
+    print("Reference: full swift-json parse cost (warmup + measured)")
+    for _ in 0..<warmup {
+        _ = try JSON.parse(bytesForm)
+    }
+    var parseSamples: [Double] = []
+    parseSamples.reserveCapacity(iters)
+    for _ in 0..<iters {
+        let t0 = mono()
+        _ = try JSON.parse(bytesForm)
+        let t1 = mono()
+        parseSamples.append((t1 - t0) * 1000.0)
+    }
+    let parseStats = computeStats(parseSamples)
+    reportStat("parse", parseStats, unit: "ms")
+    print("")
+
+    // Decomposition
+    print("=== DECOMPOSITION ===")
+    print("Per-iter MIN (ms):")
+    let parseMin = parseStats.min
+    let advMin = advStats.min
+    let dispMin = dispStats.min
+    let numMin = numStats.min
+    print("    advance         = \(String(format: "%8.2f", advMin))   \(String(format: "%5.1f%%", 100.0 * advMin / parseMin))  of parse")
+    print("    dispatch        = \(String(format: "%8.2f", dispMin))   \(String(format: "%5.1f%%", 100.0 * dispMin / parseMin))  of parse (upper bound)")
+    print("    number-tokenize = \(String(format: "%8.2f", numMin))   \(String(format: "%5.1f%%", 100.0 * numMin / parseMin))  of parse")
+    print("    --")
+    print("    parse min       = \(String(format: "%8.2f", parseMin))   (reference)")
+    print("")
+    print("Note: (A) advance vs (B) dispatch are NOT additive — both walk every byte;")
+    print("production blends them. (C) is a separate per-Number axis.")
+    print("")
+
+    // Recommendation
+    if advMin > 0.5 * parseMin {
+        print("Recommended next architectural lever:")
+        print("    SCANNER advance is \(String(format: "%.0f%%", 100.0 * advMin / parseMin)) of parse — dominant.")
+        print("    Investigate: Text.Location.Tracker overhead per advance,")
+        print("    bulk-byte loads, lazier position tracking on the hot path.")
+    } else if dispMin > 0.5 * parseMin {
+        print("Recommended next architectural lever:")
+        print("    TYPED-DISPATCH is \(String(format: "%.0f%%", 100.0 * dispMin / parseMin)) of parse (upper bound).")
+        print("    Investigate: skip-whitespace fastpath, table-driven classifier,")
+        print("    SWAR whitespace scan.")
+    } else if numMin > 0.3 * parseMin {
+        print("Recommended next architectural lever:")
+        print("    NUMBER-TOKENIZE is \(String(format: "%.0f%%", 100.0 * numMin / parseMin)) of parse.")
+        print("    Investigate: combined lex+parse fast path for numbers,")
+        print("    eliminate the Array<Byte>.Small<24> accumulator (parse directly off the input span).")
+    } else {
+        print("Decomposition residual: \(String(format: "%.0f%%", 100.0 * (parseMin - advMin - numMin) / parseMin)) unaccounted.")
+        print("Investigate: skipWhitespace, Number value-construction overhead beyond ALLOC bench,")
+        print("Object-key tokenization, scanner state setup per call.")
     }
 }
 

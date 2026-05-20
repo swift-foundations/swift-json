@@ -37,6 +37,11 @@
 //               with the same warmup + MIN-of-N methodology. Drives
 //               the Path A / Path B / array-targeted-fix decision
 //               per parse-performance-canada-anomaly.md v1.3.0.
+//   lex-microbench - decomposes the residual ~96% canada parse cost
+//               that tree-microbench surfaced as not-in-tree-emit.
+//               (A) per-byte scanner advance, (B) typed-peek
+//               dispatch over every byte, (C) lexNumberValue
+//               replay on canada's actual Number positions.
 //
 // ## Invocation
 //
@@ -65,7 +70,9 @@ let package = Package(
         .package(path: "../.."),
         .package(path: "../../../../swift-primitives/swift-dictionary-primitives"),
         .package(path: "../../../../swift-primitives/swift-hash-primitives"),
-        .package(path: "../../../../swift-primitives/swift-ascii-parser-primitives")
+        .package(path: "../../../../swift-primitives/swift-ascii-parser-primitives"),
+        .package(path: "../../../../swift-primitives/swift-lexer-primitives"),
+        .package(path: "../../../../swift-primitives/swift-ascii-primitives")
     ],
     targets: [
         .executableTarget(
@@ -74,7 +81,9 @@ let package = Package(
                 .product(name: "JSON", package: "swift-json"),
                 .product(name: "Dictionary Ordered Primitives", package: "swift-dictionary-primitives"),
                 .product(name: "Hash Primitives", package: "swift-hash-primitives"),
-                .product(name: "ASCII Decimal Parser Primitives", package: "swift-ascii-parser-primitives")
+                .product(name: "ASCII Decimal Parser Primitives", package: "swift-ascii-parser-primitives"),
+                .product(name: "Lexer Primitives", package: "swift-lexer-primitives"),
+                .product(name: "ASCII Primitives", package: "swift-ascii-primitives")
             ]
         )
     ]
