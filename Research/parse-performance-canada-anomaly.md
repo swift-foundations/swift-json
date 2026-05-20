@@ -2,9 +2,9 @@
 
 <!--
 ---
-version: 1.3.0
+version: 1.4.0
 last_updated: 2026-05-20
-status: SUPERSEDED-BY-EVIDENCE (tree-microbench 2026-05-20 shows tree-emit accounts for only ~4% of cost; lex layer dominates)
+status: RECOMMENDATION (Time Profiler 2026-05-20 localizes the ~92% residual: Swift runtime generic-metadata machinery + Tagged/typed-index infra ≈ 34% of recorded samples; alloc/ARC ≈ 14%; user JSON code only ~13%)
 tier: 1
 ---
 -->
@@ -1171,6 +1171,344 @@ peek-loop overhead beyond what the EL parser itself does).
 - [RES-018] — correctness-and-evergreen judgment carries the L1
   byte cascade (swift-byte-primitives' Byte type, Buffer.Arena
   conditional Copyable) regardless of canada-specific ROI.
+
+---
+
+## v1.4.0 — Lex Decomposition + Time Profiler Localization (2026-05-20)
+
+Date: 2026-05-20 (same-day follow-on to v1.3.0). Two complementary
+findings on this date:
+
+1. **Lex-microbench** decomposes the residual ~96% of canada parse
+   cost that tree-microbench surfaced as not-in-tree-emit. All
+   three measured lex-layer components are tiny (~3% combined).
+2. **Time Profiler (xctrace)** localizes the residual to **Swift
+   runtime generic-metadata machinery + Tagged/typed-index
+   infrastructure + ARC traffic** — costs that synthetic
+   microbenches do not isolate but Time Profiler captures
+   directly from production.
+
+### Verdict: METADATA MACHINERY + ARC DOMINATES
+
+The v1.3.0 hypothesis "lex layer dominates" is empirically **refuted
+by lex-microbench** (~3% of parse) and **replaced by Time Profiler
+evidence**: the dominant cost is the Swift runtime's generic-protocol
+metadata cache + Tagged/typed-index instantiation, not the parser
+algorithm or value-tree shape.
+
+### Methodology
+
+Extended `parse-performance-bench` (commit alongside this section)
+with `lex-microbench` mode running three sub-measurements against
+the production `Lexer.Scanner` API at 16 warmup + N=256 measured
+iters under `caffeinate -i` + `swift run -c release`:
+
+- **scanner-walk** — Build `Lexer.Scanner(span)` over canada bytes;
+  loop `while !scanner.isAtEnd { scanner.consume() }`. Sum byte
+  values to defeat DCE. Pure per-byte advance cost: cursor + position
+  tracker + byte read. Captures the canonical low-bound on
+  scanner-traversal cost over 2.15 MB.
+- **typed-dispatch** — For every byte, do `peek() as ASCII.Code`
+  + 6-case switch mirroring `parseValue`'s leading-byte dispatch.
+  Per-byte type-up + branch cost. **Upper bound**: production
+  fires this once per Value node (~333K times on canada), not
+  per byte (2.15M).
+- **number-tokenize** — Replay `lexNumberValue`'s peek-and-consume
+  loop on each canada Number token (harvested via the same scanner
+  pass tree-microbench uses). Per-Number scanner overhead in
+  isolation from EL parse and Number construction.
+
+Workload counts:
+
+- Total bytes: 2 251 051 (2.15 MB)
+- Number tokens: 111 126 (matches v1.0.0 + v1.3.0 measurements)
+- Mean number-token length: 18.25 bytes
+
+### Results
+
+| Component | min (ms) | median (ms) | p90 (ms) | mean (ms) | per-unit (min) |
+|---|---:|---:|---:|---:|---:|
+| (A) scanner-walk    |  0.893 |  0.901 |  0.930 |  0.908 | 0.40 ns/byte |
+| (B) typed-dispatch  |  5.041 |  5.117 |  5.210 |  5.139 | 2.24 ns/byte |
+| (C) number-tokenize |  1.581 |  1.615 |  1.649 |  1.618 | 14.23 ns/token |
+
+Reference parse cost (same run, same machine):
+
+| Statistic | Full JSON.parse([Byte]) (ms) |
+|---|---:|
+| min     | 235.148 |
+| median  | 241.137 |
+| p90     | 291.019 |
+| mean    | 262.429 |
+
+### Decomposition
+
+(A) and (B) both walk every byte — they are **not** additive
+(production blends them; canada's lexer reads each byte once for
+its purposes). (C) is a separate per-Number axis.
+
+Worst-case attribution (treat A as scanner cost, B as the per-Value
+upper bound, C as additional per-Number cost):
+
+| Path | Cost (ms) | % of parse |
+|---|---:|---:|
+| (A) scanner-walk        |  0.89 | 0.4% |
+| (B) typed-dispatch      |  5.04 | 2.1% |
+| (C) number-tokenize     |  1.58 | 0.7% |
+| **Lex-layer maximum sum** | **~7 ms** | **~3%** |
+| Float parse (v1.2.0)    |  2.6  | 1.1% |
+| Tree-emit (v1.3.0)      |  9.7  | 4.2% |
+| **Total accounted**     | **~19 ms** | **~8.4%** |
+| **Residual (unaccounted)** | **~216 ms** | **~91.6%** |
+
+### Where the ~92% lives — Time Profiler evidence
+
+Tooling: `xctrace record --template 'Time Profiler'` against
+`parse-performance-bench /path/to/canada.json 32 swift-json-bytes`,
+1ms sample rate, release mode, on macOS 26 / arm64. ~8.95 sec
+recording, 618 total samples with symbolicated user-callstacks.
+
+Sample-frequency grouping by category (each sample's full
+backtrace contributes one count to every named function it
+contains — "inclusive time"-like):
+
+| Category | Samples | % of total | % of attributable |
+|---|---:|---:|---:|
+| **Swift runtime metadata machinery** | 172 | 27.8% | 45.5% |
+| **Allocation / ARC traffic** | 85 | 13.8% | 22.5% |
+| **User JSON parser code** | 83 | 13.4% | 22.0% |
+| **Tagged / typed-index infra** | 38 | 6.1% | 10.0% |
+| Process startup / dyld / system | 240 | 38.8% | (excluded from attributable) |
+| **Total** | 618 | 100% | 378 (100%) |
+
+**The dominant cost on canada is the Swift runtime's generic-metadata
+machinery (~46% of attributable parse time)**, not the parser
+algorithm.
+
+Top symbol hits (samples per symbol, sorted):
+
+| Samples | Symbol | Category |
+|---:|---|---|
+| 26 | `specialized Buffer<>.Linear<>.Small<>.append(_:)` | alloc/ARC |
+| 22 | `swift::_getWitnessTable(...)` | metadata |
+| 22 | `swift::StableAddressConcurrentReadableHashMap<...>::getOrInsert<...>` | metadata |
+| 19 | `swift::TargetContextDescriptor::getGenericContext()` | metadata |
+| 18 | `getCache(...)` | metadata |
+| 16 | `swift::MetadataCacheKey::operator==` | metadata |
+| 16 | `specialized static ASCII.Decimal.Float.parse(_:)` | user |
+| 16 | `Storage<>.Inline.deinit` | alloc/ARC |
+| 13 | `LockingConcurrentMap<...>::getOrInsert<...>` | metadata |
+| 13 | `_swift_getGenericMetadata(...)` | metadata |
+| 13 | `_xzm_free` | alloc/ARC |
+| 11 | `JSON.Decode.Implementation.parseValue()` | user |
+| 10 | `JSON.Decode.Implementation.parseArray()` | user |
+| 10 | `JSON.Decode.Implementation.lexNumberValue()` | user |
+| 10 | `ConcurrentReadableHashMap<...>::find<...>` | metadata |
+| 10 | `specialized Tagged<>.init<A>(fromZero:)` | tagged |
+| 10 | `specialized Cursor<>.peek()` | user |
+| 9 | `swift_arrayDestroy` | alloc/ARC |
+| 9 | `static Tagged<>.retag<A>(_:to:)` | tagged |
+| ... | (162 more) | ... |
+
+### Interpretation
+
+1. **Metadata-cache lookups (172 samples / 28% of total)** are the
+   #1 hot path. Functions like `_getWitnessTable`,
+   `getOrInsert<MetadataCacheKey, ...>`, `getCache`,
+   `getGenericContext`, `_swift_getGenericMetadata` are Swift's
+   runtime resolving generic-protocol conformances and instantiating
+   generic types on the hot path. **Static specialization (compile-
+   time monomorphization) is NOT firing for the canada parse's hot
+   path** — the runtime is doing the work that should have been
+   done at compile time.
+
+2. **Tagged / typed-index infrastructure (38 samples / 6%)**.
+   The institute's `Tagged<...>` phantom-typed wrapper fires
+   per-byte-cursor-advance: `Tagged.init(fromZero:)`,
+   `Tagged.retag(_:to:)`, `Tagged.init(_unchecked:)`,
+   `_CarrierProtocol.vector.getter`. Each scanner advance pays
+   Tagged construction overhead because Cursor/Text.Position
+   types are Tagged-based.
+
+3. **Allocation / ARC traffic (85 samples / 14%)**. Dominated by
+   `Buffer<>.Linear<>.Small<>.append` (26 — likely scanner state
+   buffering) and `Storage<>.Inline.deinit` (16 — Number.Original.Inline
+   destructor firing per Number). `swift_arrayDestroy` (9),
+   `swift_allocObject` (6), `swift_release` (4), `RefCounts::doDecrementSlow`
+   (3) round out the ARC pressure.
+
+4. **User JSON parser code is ~13% of total samples**. Of that,
+   the EL float parser (16 samples), parseValue (11), parseArray
+   (10), lexNumberValue (10), Cursor.peek (10), eiselLemire (6),
+   Number.Original.Inline.init (5), skipWhitespace (4) account for
+   most. Consistent with v1.1.0 + v1.2.0 + v1.3.0 microbench
+   findings: user code itself is fast.
+
+### Why this is structural, not algorithmic
+
+The institute's parser is heavily generic:
+- `Lexer.Scanner` is parameterized over `Cursor.Protocol` + `Text.Protocol`.
+- `Cursor<Text>` is parameterized over `Span<Byte>` + position types.
+- `Tagged<...>` propagates through Index, Position, Count types.
+- `Byte.Protocol` is a refinement of `Carrier.Protocol<UInt8>`.
+- Plus `Parser.Input.Protocol`, `Lexer.Pull.*`, etc.
+
+At call sites, the optimizer would ideally specialize all these
+generics into a single monomorphic hot path. The Time Profiler
+shows that **specialization is incomplete**: ~46% of attributable
+time is spent in the Swift runtime resolving these generic
+relationships at runtime. Each `scanner.consume()` traverses
+Cursor<Text>.consume → Tagged<...>.retag → CarrierProtocol.vector
+getter — and Swift can't fully monomorphize this without
+explicit `@_specialize` or `@inlinable` everywhere.
+
+The microbenches did not surface this cost because:
+- The bench's tight loops trigger one specialization pattern
+  (Span<Byte> + canada bytes) and reuse it across all iterations.
+- Once a generic instantiation's metadata cache entry is hot,
+  subsequent calls bypass the slow path.
+- Production has more diverse callsites (parseValue → parseArray →
+  parseObject → parseValue → lexNumberValue → Number.Original →
+  ASCII.Decimal.Float.parse) instantiating different `Self` /
+  `Element` / `Input` combinations, each firing fresh metadata
+  cache traffic.
+
+### Implication for the next canada-perf arc
+
+The Time Profiler localizes the residual to **a compiler/runtime
+issue, not an algorithmic one**. The right architectural levers
+are very different from what v1.1.0–v1.3.0 framed:
+
+| Approach | Cost | What it closes | Confidence |
+|---|---|---|---|
+| **Aggressive specialization on the hot path** — `@_specialize(where Input == Span<Byte>, Cursor == Cursor<Text>)` on `Lexer.Scanner`'s methods, `JSON.Decode.Implementation`'s methods, `RFC_8259.Parser`'s methods, and recursively. Goal: force compile-time monomorphization so the runtime metadata cache is never queried during canada parse | Medium (~50–500 LoC of `@_specialize` annotations; iterate by profiling) | Up to ~46% of attributable parse cost (the metadata-machinery category) | High — this is the exact remedy for hot-path generic dispatch overhead |
+| **Concrete Span<Byte>-typed inner Scanner** — drop generic constraints on the hot path entirely. Provide `RFC_8259.Span.Scanner` (or similar) that's hard-coded to `Swift.Span<Byte>` + `Int` position + `Byte`-typed peeks. Trade type-system uniformity for runtime monomorphism. Per `parse-performance-architecture.md` v1.0.2 §5, Architecture A's design intent was exactly this — but Architecture A's measured 1.02× parity was on the *string-heavy symbol-graph* workload, not canada. canada exposes a generic-instantiation hot path Architecture A didn't fully close. | High (~1500–2500 LoC of duplicated lexer + parser) | Theoretically ~46% (metadata) + ~6% (Tagged) + part of ARC. Could close 50%+ of canada parse | Medium — depends on whether Cursor<Text>'s Tagged infrastructure can be bypassed without losing correctness guarantees |
+| **Tagged hot-path audit** — review every Tagged construction / retag on the parser hot path. Each `Tagged.init(fromZero:)` and `Tagged.retag(_:to:)` is a runtime cost; can any be lifted out of the inner loop or replaced with `Int` arithmetic at the inner-loop level? | Low–medium (audit + selective de-Tagging) | Up to ~10% (the Tagged/typed-index category) | High |
+| **Reduce per-Number ARC pressure** — `Storage<>.Inline.deinit` at 16 samples is RFC_8259.Number.Original.Inline running its destructor per Number. Examine whether the Inline storage's deinit is needed at all (the type is mostly trivial UInt8 fields); a `@frozen struct { ... }` with no deinit might avoid the destructor traffic | Low (~20 LoC + audit) | Up to ~3% | High |
+| **Event-grain consumption for typed-decode workloads** — `JSON.Span.EventStream` + `JSON.Serializable` per-conformer wedge | Already in progress | Bypasses the tree entirely for consumers that decode into Swift structs; doesn't help bytes→Value consumers | High |
+| **Holistic architecture rewrite** — Architecture B or C from `parse-performance-architecture.md`. Likely also needs the specialization fixes above to avoid the same runtime metadata trap | Very high (~3000+ LoC) | Closes canada by replacing the value-tree shape AND avoiding generic dispatch | Low — too many gambles compounded |
+
+**Recommendation**: pursue the **specialization audit** first
+(highest-confidence, lowest-cost lever). Specifically:
+
+1. Audit `JSON.Decode.Implementation`, `RFC_8259.Parser`,
+   `Lexer.Scanner`, `Cursor<Text>` on the canada hot path.
+2. Add `@_specialize` annotations forcing the
+   `Span<Byte>` / `Cursor<Text>` / `Byte` instantiations to be
+   monomorphized at compile time.
+3. Re-run Time Profiler post-specialization. If metadata-machinery
+   samples drop substantially, the lever is real.
+4. Stop when metadata samples are <5% of total, or when the
+   specialization annotations stop reducing the sample count.
+
+After specialization, re-measure canada parse cost. If it drops
+from 235 ms toward Foundation's 14 ms range, we're done. If
+substantial residual remains, the next lever is the Tagged
+hot-path audit followed by the per-Number ARC fix.
+
+If specialization alone closes the gap to <5× Foundation, **the
+Copyable-Value-tree architecture is fine for canada**; the
+problem was compiler/runtime, not algorithmic.
+
+If specialization closes only a fraction (say, to 100–150 ms),
+the residual is genuinely in the value-tree shape and the
+Architecture B/C question re-opens — but with a much smaller
+residual to attack.
+
+The event-grain path remains the right answer for **typed-decode
+consumers** (`JSON.Serializable` conformers materializing into
+Swift structs), independent of any canada-parse optimization.
+
+### Hypothesis disposition (final, replaces v1.3.0's)
+
+- **v1.3.0 hypothesis "lex layer dominates": EMPIRICALLY REFUTED.**
+  Scanner advance + typed-dispatch + number-tokenize sum to ~3% of
+  parse, not the ~96% the residual implied.
+- **All prior algorithmic single-component hypotheses are now
+  empirically refuted with margin** (float ~1%, tree-emit ~4%,
+  lex ~3%, all combined ~8% of parse).
+- **NEW: canada parse cost is dominated by Swift runtime metadata
+  machinery.** Time Profiler locates the residual at
+  `_getWitnessTable`, generic metadata cache lookups, Tagged
+  instantiation, and ARC traffic — 34% of total samples / 56% of
+  attributable parse time. The cost is **compiler/runtime, not
+  algorithmic**.
+- **Path A (arena alloc) ROI on canada: ≤ 2.3%** per v1.3.0.
+- **Path B (~Copyable Value) ROI on canada: ≤ 1–2%** per v1.3.0.
+- **Lex-layer algorithmic rework ROI: ≤ 3%** per this section.
+- **NEW Path X (specialization audit) ROI: up to ~46% of attributable
+  cost** if generic-protocol metadata-cache traffic can be eliminated
+  via `@_specialize` annotations on the hot path.
+
+The ordering of next-arc levers, by expected ROI:
+
+1. **Specialization audit + @_specialize annotations** (≤46% of
+   attributable cost; weeks of work)
+2. Tagged hot-path audit (≤10%; days)
+3. Per-Number ARC fix (≤3%; hours)
+4. Path A / Path B / Architecture B/C (≤5% each; weeks-to-months)
+5. Event-grain routing for typed-decode consumers (orthogonal to
+   canada-parse-the-tree; already in progress)
+
+### Cross-validation candidate
+
+The microbench methodology can be applied to twitter, citm, and
+symbol-graph workloads to verify that the residual-cost shape is
+canada-specific or universal:
+
+- **Twitter (617 KB, 7821 floats)**: 1.4× Foundation post-Tier-4.
+  Probably string-dominated; Value alloc share likely larger fraction
+  of total. Architecture A (already-shipped) probably the right
+  framing.
+- **Symbol-graph (86 MB, predominantly string-heavy)**: 1.02×
+  Foundation per `parse-performance.md` v1.2.0. Already at parity;
+  no anomaly.
+- **CITM (1.65 MB, 14986 floats)**: 4.7× Foundation. Likely a
+  middle-ground regime. Decomposition would clarify whether
+  canada's "distributed cost" generalizes.
+
+Running the tree-microbench, lex-microbench, and float-microbench
+across all three would build the cross-workload picture. Deferred
+to a follow-on arc.
+
+### Tooling
+
+- `xctrace record --template 'Time Profiler'` (Xcode 16.0, build
+  17F42; macOS 26.2). CLI-driven, scriptable, no GUI required.
+- Recording invoked via `xctrace record --template 'Time Profiler'
+  --output /tmp/canada-parse.trace --no-prompt --launch -- <bench> <args>`.
+- Trace exported via `xctrace export --xpath
+  '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]'`.
+- Hotspot frequencies computed by grep + sort + uniq + categorizing awk.
+
+The Time Profiler trace is local at `/tmp/canada-parse.trace`; not
+committed (Instruments .trace files are large multi-file bundles).
+The categorized hotspot summary `/tmp/hotspots.txt` is the
+durable derivation; this document captures the analysis.
+
+### Skill references (v1.4.0 additions)
+
+- [BENCH-005] — methodology preserved end-to-end across the four
+  microbench modes shipping this session.
+- [BENCH-011] — wrapper refcount cost model partially validated: the
+  Storage<>.Inline.deinit hot path (16 samples) and Buffer<>.Linear<>.Small<>.append
+  (26 samples) confirm ARC traffic is real but smaller than the
+  metadata-machinery cost. The "integration cost" hypothesis is
+  refined: the integration cost lives in runtime metadata caches,
+  not (only) in ARC retain/release.
+- [HANDOFF-016] (premise staleness) — every prior framing in
+  v1.0.0–v1.3.0 is reframed by Time Profiler evidence. Each
+  version preserved as historical record; v1.4.0 is current best
+  framing because it's grounded in production-shaped data
+  (Time Profiler) rather than synthetic-shape microbenches.
+- [RES-018] correctness-and-evergreen carries the byte cascade +
+  Buffer.Arena conditional-Copyable work regardless of canada ROI.
+- [EXP-011] — workaround-validation trap: synthetic microbenches
+  validated component-level cost models but missed the integration
+  cost (runtime metadata machinery). Time Profiler captured it
+  because it samples actual production-shape callstacks. Reinforces
+  the rule that synthetic microbenches must be paired with
+  end-to-end production-shape measurement.
 
 ## Provenance
 
