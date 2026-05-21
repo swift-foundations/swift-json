@@ -603,7 +603,7 @@ The remaining 2.33× gap to Foundation is concentrated in:
 - `swift-primitives/swift-input-primitives/Sources/Input Primitives/Input.swift` — Input.Borrowed "future direction" note
 - `swift-primitives/swift-input-primitives/Sources/Input Primitives/Input.Buffer+Input.Protocol.swift` — the `first` accessor that the lexer's `peek` should be using
 - `swift-primitives/swift-ascii-parser-primitives/Sources/ASCII Decimal Parser Primitives/ASCII.Decimal.Parser.swift` — drop-in integer parser
-- `swift-primitives/swift-binary-parser-primitives/Sources/Binary Input View Primitives/Binary.Bytes.Input.View.swift` — Span-backed cursor pattern
+- `swift-primitives/swift-cursor-primitives/Sources/Cursor Primitives Core/` + `swift-primitives/swift-byte-parser-primitives/Sources/Byte Parser Primitives/Cursor+Byte.swift` — Span-backed typed cursor pattern (`Cursor<Byte>`)
 - `swift-primitives/swift-parser-primitives/Experiments/suppressed-escapable-associated-types/Sources/main.swift` — confirms `~Escapable` on associated types works in Swift 6.2.3+
 - `swift-foundations/swift-linter-rules/Scripts/regenerate-stdlib-refinements.sh:71` — the regen script line that runs the experiment in debug mode
 - `swift-foundations/swift-json/Experiments/symbol-graph-conformance-oracle/Outputs/run-stdlib.txt` — committed evidence of the 129 s debug-mode run
