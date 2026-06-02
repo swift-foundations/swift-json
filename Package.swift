@@ -15,13 +15,13 @@ let package = Package(
         .library(name: "JSON", targets: ["JSON"])
     ],
     dependencies: [
-        .package(path: "../../swift-ietf/swift-rfc-8259"),
-        .package(path: "../../swift-primitives/swift-parser-primitives"),
-        .package(path: "../../swift-primitives/swift-array-primitives"),
-        .package(path: "../../swift-primitives/swift-ascii-parser-primitives"),
-        .package(path: "../../swift-primitives/swift-coder-primitives"),
-        .package(path: "../../swift-primitives/swift-either-primitives"),
-        .package(path: "../swift-async")
+        .package(url: "https://github.com/swift-ietf/swift-rfc-8259.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-parser-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-array-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-ascii-parser-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-coder-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-either-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-foundations/swift-async.git", branch: "main")
     ],
     targets: [
         .target(
