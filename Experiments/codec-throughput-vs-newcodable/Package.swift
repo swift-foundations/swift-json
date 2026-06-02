@@ -96,7 +96,7 @@ let package = Package(
     platforms: [.macOS(.v26)],
     dependencies: [
         .package(path: "../.."),
-        .package(path: "../../../../swiftlang/swift-foundation"),
+        .package(url: "https://github.com/swiftlang/swift-foundation.git", branch: "main"),
     ],
     targets: [
         .executableTarget(

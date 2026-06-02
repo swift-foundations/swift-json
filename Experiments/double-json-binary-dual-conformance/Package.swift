@@ -25,7 +25,7 @@ let package = Package(
     platforms: [.macOS(.v26)],
     dependencies: [
         .package(path: "../.."),
-        .package(path: "../../../../swift-primitives/swift-binary-primitives"),
+        .package(url: "https://github.com/swift-primitives/swift-binary-primitives.git", branch: "main"),
     ],
     targets: [
         .target(

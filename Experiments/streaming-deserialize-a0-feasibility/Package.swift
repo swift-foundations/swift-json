@@ -61,7 +61,7 @@ let package = Package(
     name: "streaming-deserialize-a0-feasibility",
     platforms: [.macOS(.v26)],
     dependencies: [
-        .package(path: "../../../../swift-ietf/swift-rfc-8259")
+        .package(url: "https://github.com/swift-ietf/swift-rfc-8259.git", branch: "main")
     ],
     targets: [
         .executableTarget(

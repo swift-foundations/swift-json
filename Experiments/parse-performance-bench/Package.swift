@@ -68,11 +68,11 @@ let package = Package(
     platforms: [.macOS(.v26)],
     dependencies: [
         .package(path: "../.."),
-        .package(path: "../../../../swift-primitives/swift-dictionary-primitives"),
-        .package(path: "../../../../swift-primitives/swift-hash-primitives"),
-        .package(path: "../../../../swift-primitives/swift-ascii-parser-primitives"),
-        .package(path: "../../../../swift-primitives/swift-lexer-primitives"),
-        .package(path: "../../../../swift-primitives/swift-ascii-primitives")
+        .package(url: "https://github.com/swift-primitives/swift-dictionary-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-hash-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-ascii-parser-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-lexer-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-ascii-primitives.git", branch: "main")
     ],
     targets: [
         .executableTarget(
