@@ -17,6 +17,35 @@
 
 @_spi(Unsafe) public import Array_Primitives
 public import RFC_8259
+// The small-column tower must be `public import`: the lexer helpers below are `@inlinable`, so the
+// column's conformances (`Memory.Small: Growable`, `Storage.Contiguous: Store.Protocol`,
+// `Buffer.Linear: Buffer.Protocol`) have to be visible to inlined clients ([MemberImportVisibility]).
+// This matches the existing `Array_Primitives` public import; the JSON public API surface
+// (`currentNumber()` → `RFC_8259.Number`) is unchanged.
+public import Buffer_Primitive
+public import Buffer_Linear_Primitive
+public import Buffer_Linear_Primitives
+public import Storage_Primitive
+public import Storage_Contiguous_Primitives
+public import Memory_Allocator_Primitive
+public import Memory_Small_Primitives
+public import Byte_Primitive
+public import Index_Primitives
+
+/// The number-lexer scratch accumulator: the move-only **small column** (`Memory.Small<24>`) of the
+/// `Array<S>`-over-column tower — the inline⊕heap SBO that restores the original
+/// `Array<Byte>.Small<24>` behaviour: a JSON number up to 24 bytes accumulates entirely inline (no
+/// heap allocation — the common case), and longer numbers spill transparently to a heap region
+/// (valid JSON may exceed 24 bytes — it never traps). `init(initialCapacity:)` sizes the inline
+/// budget. This is the principled spelling now that `Storage.Contiguous` derives its typed base per
+/// access ([MEM-SAFE-029]) — the small column's inline arm moves its bytes with the value, which the
+/// per-access base derivation tracks correctly (the prior cached-base shape corrupted on the first
+/// move, which is why this scratch buffer was temporarily spelled as the always-heap column).
+///
+/// `@usableFromInline` (not `private`): referenced by the `@inlinable` lexer helpers below.
+@usableFromInline
+typealias SmallByteArray =
+    Array<Buffer<Storage<Memory.Allocator<Memory.Small<24>>>.Contiguous<Byte>>.Linear>
 
 // MARK: - Public payload-decode methods on the generic stream
 
@@ -257,7 +286,7 @@ internal func _lexNumber(
     scanner: inout Lexer.Scanner
 ) throws(RFC_8259.Error) -> RFC_8259.Number {
     let startCursor = scanner.position
-    var bytes = Array_Primitives.Array<Byte>.Small<24>()
+    var bytes = SmallByteArray(initialCapacity: Index<Byte>.Count(UInt(24)))
 
     // Optional minus.
     if let b: ASCII.Code = scanner.peek(), b == .hyphen {

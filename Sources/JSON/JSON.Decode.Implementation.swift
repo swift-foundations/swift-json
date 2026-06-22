@@ -21,6 +21,23 @@ public import ASCII_Decimal_Parser_Primitives
 public import Lexer_Primitives
 public import RFC_8259
 @_spi(Unsafe) public import Array_Primitives
+// The small-column tower is `public import` because the lexer helpers are `@inlinable` and need the
+// column's conformances visible to inlined clients ([MemberImportVisibility]) — matching the existing
+// `Array_Primitives` public import. The JSON public API surface is unchanged.
+public import Buffer_Primitive
+public import Buffer_Linear_Primitive
+public import Buffer_Linear_Primitives
+public import Storage_Primitive
+public import Storage_Contiguous_Primitives
+public import Memory_Allocator_Primitive
+public import Memory_Small_Primitives
+public import Byte_Primitive
+public import Index_Primitives
+
+// The number-lexer scratch accumulator `SmallByteArray` (the inline⊕heap small column,
+// `Memory.Small<24>`) is declared once in `JSON.Pull.Stream+Payload.swift` and shared module-wide
+// (`@usableFromInline`). The tower imports above are still required in THIS file because
+// `lexNumberValue()` is `@inlinable` and the column's conformances must be visible here too.
 
 extension JSON.Decode {
     /// Wholesale JSON parser.
@@ -577,7 +594,7 @@ extension JSON.Decode.Implementation {
     @_lifetime(self: copy self)
     internal mutating func lexNumberValue() throws(RFC_8259.Error) -> RFC_8259.Number {
         let startCursor = scanner.position
-        var bytes = Array_Primitives.Array<Byte>.Small<24>()
+        var bytes = SmallByteArray(initialCapacity: Index<Byte>.Count(UInt(24)))
 
         // Optional minus
         // Type-up: lift to ASCII.Code at the peek boundary.
