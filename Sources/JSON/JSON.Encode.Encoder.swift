@@ -7,6 +7,7 @@
 /// `JSON.*`, not at the L2 spec namespace.
 
 public import RFC_8259
+public import ASCII_Primitives
 
 extension JSON.Encode {
     /// Internal encoder state.
@@ -33,15 +34,6 @@ extension JSON.Encode {
 // MARK: - Encoder Constants
 
 extension JSON.Encode.Encoder {
-    /// Hex digit lookup table (0-15 → '0'-'9', 'a'-'f').
-    @usableFromInline
-    static let hexDigits: [UInt8] = [
-        .ascii.`0`, .ascii.`1`, .ascii.`2`, .ascii.`3`,
-        .ascii.`4`, .ascii.`5`, .ascii.`6`, .ascii.`7`,
-        .ascii.`8`, .ascii.`9`, .ascii.a, .ascii.b,
-        .ascii.c, .ascii.d, .ascii.e, .ascii.f
-    ]
-
     // Keywords
     @usableFromInline static let keywordNull: [UInt8] = [.ascii.n, .ascii.u, .ascii.l, .ascii.l]
     @usableFromInline static let keywordTrue: [UInt8] = [.ascii.t, .ascii.r, .ascii.u, .ascii.e]
@@ -221,10 +213,17 @@ extension JSON.Encode.Encoder {
         _ value: UInt16,
         into buffer: inout Buffer
     ) where Buffer.Element == UInt8 {
-        buffer.append(Self.hexDigits[Int((value >> 12) & 0x0F)])
-        buffer.append(Self.hexDigits[Int((value >> 8) & 0x0F)])
-        buffer.append(Self.hexDigits[Int((value >> 4) & 0x0F)])
-        buffer.append(Self.hexDigits[Int(value & 0x0F)])
+        // Per-nibble delegation to the L1 single-byte ASCII primitive
+        // preserves the fixed-4 zero-padded \uXXXX output (each masked
+        // nibble is 0-15, so each lookup yields exactly one lowercase
+        // hex byte and the force-unwrap is structurally non-nil).
+        // `hexDigitLowercase` now returns `ASCII.Code?` after the L1
+        // retype; `.underlying` recovers the raw `UInt8` for the byte
+        // buffer, keeping the emitted bytes identical.
+        buffer.append(ASCII.Serialization.hexDigitLowercase(UInt8((value >> 12) & 0x0F))!.underlying)
+        buffer.append(ASCII.Serialization.hexDigitLowercase(UInt8((value >> 8) & 0x0F))!.underlying)
+        buffer.append(ASCII.Serialization.hexDigitLowercase(UInt8((value >> 4) & 0x0F))!.underlying)
+        buffer.append(ASCII.Serialization.hexDigitLowercase(UInt8(value & 0x0F))!.underlying)
     }
 
     /// Encodes an array.
