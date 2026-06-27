@@ -18,7 +18,7 @@ struct ProtocolTests {
 
     @Test
     func `parse via Coder.Protocol surface returns RFC_8259.Value`() throws {
-        let bytes: [UInt8] = Swift.Array("true".utf8)
+        let bytes: [Byte] = "true".utf8.map(Byte.init)
         let coder = JSON.Coder()
         var span = bytes.span
         let value = try coder.parse(&span)
@@ -28,7 +28,7 @@ struct ProtocolTests {
 
     @Test
     func `parse via Coder.Protocol surface throws Either left on malformed JSON`() throws {
-        let bytes: [UInt8] = Swift.Array("{not json".utf8)
+        let bytes: [Byte] = "{not json".utf8.map(Byte.init)
         let coder = JSON.Coder()
         var span = bytes.span
         do {
@@ -55,7 +55,7 @@ struct ProtocolTests {
 
     @Test
     func `round-trip via Coder.Protocol surface preserves value`() throws {
-        let inputBytes: [UInt8] = Swift.Array("[1,2,3]".utf8)
+        let inputBytes: [Byte] = "[1,2,3]".utf8.map(Byte.init)
         let coder = JSON.Coder()
 
         var inputSpan = inputBytes.span
@@ -64,7 +64,10 @@ struct ProtocolTests {
         var outputBuffer: [UInt8] = []
         try coder.serialize(parsed, into: &outputBuffer)
 
-        var outputSpan = outputBuffer.span
+        // serialize emits a `[UInt8]` Buffer; the parser consumes a
+        // `Span<Byte>`. Bridge the encoder output to `[Byte]` for re-parse.
+        let outputBytes: [Byte] = outputBuffer.map(Byte.init)
+        var outputSpan = outputBytes.span
         let reparsed = try coder.parse(&outputSpan)
 
         #expect(parsed == reparsed)

@@ -26,8 +26,8 @@ struct Tests {
 
     @Test
     func `Assemble.from short-circuits at position 0 and returns parsed value`() throws {
-        let bytes: [UInt8] = Swift.Array(#"{"name":"alice","age":30,"tags":["x","y"]}"#.utf8)
-        try bytes.withUnsafeBufferPointer { (buf: UnsafeBufferPointer<UInt8>) throws(RFC_8259.Error) in
+        let bytes: [Byte] = #"{"name":"alice","age":30,"tags":["x","y"]}"#.utf8.map(Byte.init)
+        try bytes.withUnsafeBufferPointer { (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
             let span = buf.span
             var stream = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(span)
             let unforkedBefore: Bool = stream.isPristine
@@ -49,8 +49,8 @@ struct Tests {
         // Pull one event manually before calling Assemble.from so that
         // isPristine becomes false; the helper then routes
         // through the slow event-pull-and-rebuild path.
-        let bytes: [UInt8] = Swift.Array(#"[1,2,3]"#.utf8)
-        try bytes.withUnsafeBufferPointer { (buf: UnsafeBufferPointer<UInt8>) throws(RFC_8259.Error) in
+        let bytes: [Byte] = #"[1,2,3]"#.utf8.map(Byte.init)
+        try bytes.withUnsafeBufferPointer { (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
             let span = buf.span
             var stream = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(span)
             let firstToken = try stream.next()
@@ -64,8 +64,8 @@ struct Tests {
 
     @Test
     func `Assemble.from on null produces .null value`() throws {
-        let bytes: [UInt8] = Swift.Array("null".utf8)
-        try bytes.withUnsafeBufferPointer { (buf: UnsafeBufferPointer<UInt8>) throws(RFC_8259.Error) in
+        let bytes: [Byte] = "null".utf8.map(Byte.init)
+        try bytes.withUnsafeBufferPointer { (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
             let span = buf.span
             var stream = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(span)
             let value = try Lexer.Pull.Assemble.from(&stream, strategy: JSON.Assemble.self)
@@ -77,9 +77,9 @@ struct Tests {
     func `Assemble.from output matches public JSON.Decode.parse output`() throws {
         // Round-trip: the assembler's output via Assemble.from MUST
         // equal the public `JSON.Decode.parse(_:)` output on the same bytes.
-        let bytes: [UInt8] = Swift.Array(#"{"a":1,"b":[true,null,"s"]}"#.utf8)
+        let bytes: [Byte] = #"{"a":1,"b":[true,null,"s"]}"#.utf8.map(Byte.init)
         let direct = try JSON.Decode.parse(bytes)
-        try bytes.withUnsafeBufferPointer { (buf: UnsafeBufferPointer<UInt8>) throws(RFC_8259.Error) in
+        try bytes.withUnsafeBufferPointer { (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
             let span = buf.span
             var stream = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(span)
             let assembled = try Lexer.Pull.Assemble.from(&stream, strategy: JSON.Assemble.self)

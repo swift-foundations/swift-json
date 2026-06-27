@@ -17,8 +17,8 @@ struct Tests {
     // MARK: - Structural tokens via Span
 
     @Test
-    func `Span parses structural tokens via [UInt8] path`() throws {
-        let bytes: [UInt8] = Swift.Array("[{},[]]".utf8)
+    func `Span parses structural tokens via [Byte] path`() throws {
+        let bytes: [Byte] = "[{},[]]".utf8.map(Byte.init)
         let value = try JSON.Decode.parse(bytes)
         // Outer array has one object and one array.
         #expect(value.array?.count == 2)
