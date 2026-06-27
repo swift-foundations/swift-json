@@ -103,9 +103,29 @@ internal func _lexString(
     scratch.removeAll(keepingCapacity: true)
     var isASCII = true
 
-    // Type-up: lift to ASCII.Code at the peek boundary so cases match
-    // ASCII.Code constants directly (JSON tokens are strict ASCII).
-    while let code: ASCII.Code = scanner.peek() {
+    // Drive the loop on the RAW byte. JSON strings are UTF-8, so the
+    // content may contain bytes >= 0x80 (multi-byte sequences) that
+    // ASCII.Code cannot carry. The previous `while let code: ASCII.Code`
+    // bound the typed `peek` overload, which returns nil for any byte
+    // >= 0x80 — terminating the loop on the first non-ASCII byte and
+    // mis-reporting every such string as unterminated (RFC 8259 §7
+    // permits any Unicode scalar except `"`, `\`, and 0x00...0x1F).
+    // Lift to ASCII.Code only to match the structural cases (quote /
+    // backslash / control, all < 0x80) per the byte-discipline rubric
+    // ([API-BYTE-004]); a byte outside the 7-bit range is string content
+    // appended raw.
+    while let byte: Byte = scanner.peek() {
+        guard byte.underlying < 0x80 else {
+            // Multi-byte UTF-8 lead/continuation byte — string content.
+            isASCII = false
+            scratch.append(byte.underlying)
+            scanner.advance()
+            continue
+        }
+        // In range: lift unchecked (the guard above IS the throwing
+        // init's validation) so the structural cases match ASCII.Code
+        // constants directly.
+        let code = ASCII.Code(unchecked: byte)
         switch code {
         case .quotationMark:
             scanner.advance()
@@ -135,14 +155,8 @@ internal func _lexString(
                 reason: .controlCharacter(code)
             )
         default:
-            // Non-control byte. ASCII.Code only carries 0x00...0x7F per
-            // ASCII.Code's `init(_ byte: Byte)` requirement, but for
-            // strings we may see 0x80+ continuation bytes — read the
-            // raw byte and append directly to the UTF-8 scratch.
-            // AUDIT [.underlying]: read raw UInt8 for UTF-8 passthrough.
-            let raw = code.underlying
-            if raw > 0x7F { isASCII = false }
-            scratch.append(raw)
+            // Printable 7-bit ASCII content (0x20...0x7F minus the cases above).
+            scratch.append(code.underlying)
             scanner.advance()
         }
     }

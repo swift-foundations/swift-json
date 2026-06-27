@@ -192,7 +192,7 @@ extension JSON.Decode.Implementation {
         default:
             throw .unexpectedToken(
                 at: currentPosition(),
-                found: .unknown(code),
+                found: .unknown(code.byte),
                 expected: .value
             )
         }
@@ -246,7 +246,7 @@ extension JSON.Decode.Implementation {
             default:
                 throw .unexpectedToken(
                     at: currentPosition(),
-                    found: .unknown(code),
+                    found: .unknown(code.byte),
                     expected: .commaOrEnd
                 )
             }
@@ -295,7 +295,7 @@ extension JSON.Decode.Implementation {
             default:
                 throw .unexpectedToken(
                     at: currentPosition(),
-                    found: .unknown(code),
+                    found: .unknown(code.byte),
                     expected: .commaOrEnd
                 )
             }
@@ -314,7 +314,7 @@ extension JSON.Decode.Implementation {
         guard firstCode == .quotationMark else {
             throw .unexpectedToken(
                 at: currentPosition(),
-                found: .unknown(firstCode),
+                found: .unknown(firstCode.byte),
                 expected: .objectKey
             )
         }
@@ -328,7 +328,7 @@ extension JSON.Decode.Implementation {
         guard colonCode == .colon else {
             throw .unexpectedToken(
                 at: currentPosition(),
-                found: .unknown(colonCode),
+                found: .unknown(colonCode.byte),
                 expected: .colon
             )
         }
@@ -405,7 +405,7 @@ extension JSON.Decode.Implementation {
             guard code == expectedCode else {
                 throw .unexpectedToken(
                     at: position(at: startCursor),
-                    found: .unknown(code),
+                    found: .unknown(code.byte),
                     expected: .value
                 )
             }
@@ -434,9 +434,29 @@ extension JSON.Decode.Implementation {
         stringScratch.removeAll(keepingCapacity: true)
         var isASCII = true
 
-        // Type-up: lift to ASCII.Code at the peek boundary so cases match
-        // ASCII.Code constants directly.
-        while let code: ASCII.Code = scanner.peek() {
+        // Drive the loop on the RAW byte. JSON strings are UTF-8, so the
+        // content may contain bytes >= 0x80 (multi-byte sequences) that
+        // ASCII.Code cannot carry. The previous `while let code: ASCII.Code`
+        // bound the typed `peek` overload, which returns nil for any byte
+        // >= 0x80 — terminating the loop on the first non-ASCII byte and
+        // mis-reporting every such string as unterminated (RFC 8259 §7
+        // permits any Unicode scalar except `"`, `\`, and 0x00...0x1F).
+        // Lift to ASCII.Code only to match the structural cases (quote /
+        // backslash / control, all < 0x80) per the byte-discipline rubric
+        // ([API-BYTE-004]); a byte outside the 7-bit range is string content
+        // appended raw.
+        while let byte: Byte = scanner.peek() {
+            guard byte.underlying < 0x80 else {
+                // Multi-byte UTF-8 lead/continuation byte — string content.
+                isASCII = false
+                stringScratch.append(byte.underlying)
+                scanner.advance()
+                continue
+            }
+            // In range: lift unchecked (the guard above IS the throwing
+            // init's validation) so the structural cases match ASCII.Code
+            // constants directly.
+            let code = ASCII.Code(unchecked: byte)
             switch code {
             case .quotationMark:                 // " - closing quote
                 scanner.advance()
@@ -466,13 +486,8 @@ extension JSON.Decode.Implementation {
                 throw .invalidString(at: currentPosition(), reason: .controlCharacter(code))
 
             default:
-                // Non-control byte. ASCII.Code carries the raw value;
-                // for strings we may see 0x80+ UTF-8 continuation bytes
-                // — read the raw byte and append to the UTF-8 scratch.
-                // AUDIT [.underlying]: read raw UInt8 for UTF-8 passthrough.
-                let raw = code.underlying
-                if raw > 0x7F { isASCII = false }
-                stringScratch.append(raw)
+                // Printable 7-bit ASCII content (0x20...0x7F minus the cases above).
+                stringScratch.append(code.underlying)
                 scanner.advance()
             }
         }
