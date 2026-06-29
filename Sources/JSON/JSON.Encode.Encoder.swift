@@ -220,10 +220,10 @@ extension JSON.Encode.Encoder {
         // `hexDigitLowercase` now returns `ASCII.Code?` after the L1
         // retype; `.underlying` recovers the raw `UInt8` for the byte
         // buffer, keeping the emitted bytes identical.
-        buffer.append(ASCII.Serialization.hexDigitLowercase(UInt8((value >> 12) & 0x0F))!.underlying)
-        buffer.append(ASCII.Serialization.hexDigitLowercase(UInt8((value >> 8) & 0x0F))!.underlying)
-        buffer.append(ASCII.Serialization.hexDigitLowercase(UInt8((value >> 4) & 0x0F))!.underlying)
-        buffer.append(ASCII.Serialization.hexDigitLowercase(UInt8(value & 0x0F))!.underlying)
+        buffer.append(ASCII.Hexadecimal.code(UInt8((value >> 12) & 0x0F), case: .lower)!.underlying)
+        buffer.append(ASCII.Hexadecimal.code(UInt8((value >> 8) & 0x0F), case: .lower)!.underlying)
+        buffer.append(ASCII.Hexadecimal.code(UInt8((value >> 4) & 0x0F), case: .lower)!.underlying)
+        buffer.append(ASCII.Hexadecimal.code(UInt8(value & 0x0F), case: .lower)!.underlying)
     }
 
     /// Encodes an array.
