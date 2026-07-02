@@ -96,7 +96,7 @@ ground truth for the production-scale number.
 
 ```bash
 cd /Users/coen/Developer/swift-foundations/swift-json/Experiments/streaming-deserialize-a0-feasibility
-rm -rf .build              # per [BENCH-002]
+rm -rf .build              # clean build avoids stale artifacts skewing benchmark results
 swift build -c release
 .build/release/check-token-kind-storage
 .build/release/check-lifetime-inout-protocol
