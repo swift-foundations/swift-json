@@ -29,6 +29,7 @@ public import Storage_Primitive
 public import Storage_Contiguous_Primitives
 public import Memory_Allocator_Primitive
 public import Memory_Small_Primitives
+public import Array_Small_Primitive
 public import Byte_Primitive
 public import Index_Primitives
 
@@ -44,8 +45,7 @@ public import Index_Primitives
 ///
 /// `@usableFromInline` (not `private`): referenced by the `@inlinable` lexer helpers below.
 @usableFromInline
-typealias SmallByteArray =
-    Array<Buffer<Storage<Memory.Allocator<Memory.Small<24>>>.Contiguous<Byte>>.Linear>
+typealias SmallByteArray = Array<Byte>.Small<24>
 
 // MARK: - Public payload-decode methods on the generic stream
 
@@ -300,7 +300,7 @@ internal func _lexNumber(
     scanner: inout Lexer.Scanner
 ) throws(RFC_8259.Error) -> RFC_8259.Number {
     let startCursor = scanner.position
-    var bytes = SmallByteArray(initialCapacity: Index<Byte>.Count(UInt(24)))
+    var bytes = SmallByteArray(store: .init(minimumCapacity: Index<Byte>.Count(24)))
 
     // Optional minus.
     if let b: ASCII.Code = scanner.peek(), b == .hyphen {

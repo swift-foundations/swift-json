@@ -45,6 +45,7 @@ let package = Package(
                 .product(name: "RFC 8259", package: "swift-rfc-8259"),
                 .product(name: "Parser Error Primitives", package: "swift-parser-primitives"),
                 .product(name: "Array Primitives", package: "swift-array-primitives"),
+                .product(name: "Array Small Primitive", package: "swift-array-primitives"),
                 .product(name: "Buffer Primitive", package: "swift-buffer-primitives"),
                 .product(name: "Buffer Linear Primitive", package: "swift-buffer-linear-primitives"),
                 .product(name: "Buffer Linear Primitives", package: "swift-buffer-linear-primitives"),
