@@ -1,6 +1,6 @@
 # .github/metadata.yaml
 # Triaged by AI-assisted bulk pass (2026-04-29).
-description: "JSON for Swift."
+description: "Type-safe JSON values with typed throws, literal construction, and a pull-driven RFC 8259 streaming decoder for Swift."
 topics:
   - foundations
   - json
