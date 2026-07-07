@@ -1,4 +1,4 @@
-/// Extensions for converting JSON values to Int.
+// Extensions for converting JSON values to Int.
 
 // MARK: - Int from JSON
 

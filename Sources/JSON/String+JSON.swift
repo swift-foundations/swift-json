@@ -1,4 +1,4 @@
-/// Extensions for converting JSON values to String.
+// Extensions for converting JSON values to String.
 
 // MARK: - String from JSON
 

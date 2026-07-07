@@ -2,6 +2,7 @@
 /// swift-json
 
 import Testing
+
 @testable import JSON
 
 @Suite("Stream Tests")
@@ -12,10 +13,10 @@ struct StreamTests {
     @Test
     func `Parse NDJSON stream`() async throws {
         let input = """
-        {"id":1}
-        {"id":2}
-        {"id":3}
-        """
+            {"id":1}
+            {"id":2}
+            {"id":3}
+            """
 
         let bytes = AsyncStream<UInt8> { continuation in
             for byte in input.utf8 {
@@ -38,11 +39,11 @@ struct StreamTests {
     @Test
     func `Skip empty lines in NDJSON`() async throws {
         let input = """
-        {"id":1}
+            {"id":1}
 
-        {"id":2}
+            {"id":2}
 
-        """
+            """
 
         let bytes = AsyncStream<UInt8> { continuation in
             for byte in input.utf8 {
@@ -65,10 +66,10 @@ struct StreamTests {
     @Test
     func `Continue after malformed line`() async {
         let input = """
-        {"id":1}
-        not json
-        {"id":3}
-        """
+            {"id":1}
+            not json
+            {"id":3}
+            """
 
         let bytes = AsyncStream<UInt8> { continuation in
             for byte in input.utf8 {

@@ -6,3 +6,7 @@ parent_config: https://raw.githubusercontent.com/swift-standards/swift-standards
 # Package-specific overrides
 disabled_rules:
   - function_parameter_count
+  # force_try: deliberate at serialize/encode entry points — depth overflow is a
+  # precondition-equivalent fault by design (documented on each site); typed
+  # propagation is offered via JSON.Coder instead.
+  - force_try

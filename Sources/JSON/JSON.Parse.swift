@@ -16,7 +16,8 @@
 /// ```
 
 import RFC_8259
-//import Async
+
+// import Async
 
 // MARK: - Parse Accessor
 
@@ -288,4 +289,3 @@ internal func _offset(of error: RFC_8259.Error) -> Text.Position {
     case .trailingContent(let pos): return pos.offset
     }
 }
-

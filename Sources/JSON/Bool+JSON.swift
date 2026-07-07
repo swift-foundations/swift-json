@@ -1,4 +1,4 @@
-/// Extensions for converting JSON values to Bool.
+// Extensions for converting JSON values to Bool.
 
 // MARK: - Bool from JSON
 

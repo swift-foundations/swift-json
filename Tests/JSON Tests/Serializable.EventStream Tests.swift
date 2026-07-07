@@ -17,6 +17,7 @@
 ///   `ArraySlice<Byte>`).
 
 import Testing
+
 @testable import JSON
 
 @Suite("Serializable EventStream Tests")
@@ -42,7 +43,7 @@ struct SerializableEventStreamTests {
     func `Int64 round-trips via from eventDecodingJsonBytes`() throws {
         let bytes: [Byte] = "9223372036854775807".utf8.map(Byte.init)
         let result = try Int64.from(eventDecodingJsonBytes: bytes)
-        #expect(result == 9223372036854775807)
+        #expect(result == 9_223_372_036_854_775_807)
     }
 
     @Test

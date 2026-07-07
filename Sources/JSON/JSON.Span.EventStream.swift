@@ -50,6 +50,7 @@ extension JSON.Span.EventStream {
 
 extension JSON.Span.EventStream {
     /// `true` until the first mutating call advances the cursor.
+    ///
     /// Used by `JSON.Assemble.from(_:)` to short-circuit to the
     /// wholesale-parse fast path on the default fallback.
     @inlinable
@@ -64,29 +65,25 @@ extension JSON.Span.EventStream {
     @inlinable
     @_lifetime(self: copy self)
     public mutating func next() throws(JSON.Error) -> Token? {
-        do { return try inner.next() }
-        catch { throw JSON.Error(error) }
+        do { return try inner.next() } catch { throw JSON.Error(error) }
     }
 
     @inlinable
     @_lifetime(self: copy self)
     public mutating func currentString() throws(JSON.Error) -> String {
-        do { return try inner.currentString() }
-        catch { throw JSON.Error(error) }
+        do { return try inner.currentString() } catch { throw JSON.Error(error) }
     }
 
     @inlinable
     @_lifetime(self: copy self)
     public mutating func currentNumber() throws(JSON.Error) -> RFC_8259.Number {
-        do { return try inner.currentNumber() }
-        catch { throw JSON.Error(error) }
+        do { return try inner.currentNumber() } catch { throw JSON.Error(error) }
     }
 
     @inlinable
     @_lifetime(self: copy self)
     public mutating func skipValue() throws(JSON.Error) {
-        do { try inner.skip() }
-        catch { throw JSON.Error(error) }
+        do { try inner.skip() } catch { throw JSON.Error(error) }
     }
 
     @inlinable

@@ -16,22 +16,22 @@
 /// content only.
 
 @_spi(Unsafe) public import Array_Primitives
-public import RFC_8259
+public import Array_Small_Primitive
+public import Buffer_Linear_Primitive
+public import Buffer_Linear_Primitives
 // The small-column tower must be `public import`: the lexer helpers below are `@inlinable`, so the
 // column's conformances (`Memory.Small: Growable`, `Storage.Contiguous: Store.Protocol`,
 // `Buffer.Linear: Buffer.Protocol`) have to be visible to inlined clients ([MemberImportVisibility]).
 // This matches the existing `Array_Primitives` public import; the JSON public API surface
 // (`currentNumber()` → `RFC_8259.Number`) is unchanged.
 public import Buffer_Primitive
-public import Buffer_Linear_Primitive
-public import Buffer_Linear_Primitives
-public import Storage_Primitive
-public import Storage_Contiguous_Primitives
-public import Memory_Allocator_Primitive
-public import Memory_Small_Primitives
-public import Array_Small_Primitive
 public import Byte_Primitive
 public import Index_Primitives
+public import Memory_Allocator_Primitive
+public import Memory_Small_Primitives
+public import RFC_8259
+public import Storage_Contiguous_Primitives
+public import Storage_Primitive
 
 /// The number-lexer scratch accumulator: the move-only **small column** (`Memory.Small<24>`) of the
 /// `Array<S>`-over-column tower — the inline⊕heap SBO that restores the original
@@ -98,7 +98,7 @@ internal func _lexString(
     scratch: inout [UInt8]
 ) throws(RFC_8259.Error) -> String {
     let startCursor = scanner.position
-    scanner.advance() // Consume opening `"`.
+    scanner.advance()  // Consume opening `"`.
 
     scratch.removeAll(keepingCapacity: true)
     var isASCII = true
@@ -180,15 +180,15 @@ internal func _lexEscape(
     }
     scanner.advance()
     switch code {
-    case .quotationMark:  return [.ascii.quotationMark]
-    case .reverseSlant:   return [.ascii.reverseSlant]
-    case .solidus:        return [.ascii.solidus]
-    case .b:              return [.ascii.bs]
-    case .f:              return [.ascii.ff]
-    case .n:              return [.ascii.lf]
-    case .r:              return [.ascii.cr]
-    case .t:              return [.ascii.htab]
-    case .u:              return try _lexUnicodeEscape(scanner: &scanner)
+    case .quotationMark: return [.ascii.quotationMark]
+    case .reverseSlant: return [.ascii.reverseSlant]
+    case .solidus: return [.ascii.solidus]
+    case .b: return [.ascii.bs]
+    case .f: return [.ascii.ff]
+    case .n: return [.ascii.lf]
+    case .r: return [.ascii.cr]
+    case .t: return [.ascii.htab]
+    case .u: return try _lexUnicodeEscape(scanner: &scanner)
     default:
         throw .invalidString(
             at: _position(at: scanner.position, scanner: scanner),
@@ -258,7 +258,8 @@ internal func _lexUnicodeEscape(
         }
 
         guard let lowCodePoint = _parseHex(lowHex),
-              lowCodePoint >= 0xDC00 && lowCodePoint <= 0xDFFF else {
+            lowCodePoint >= 0xDC00 && lowCodePoint <= 0xDFFF
+        else {
             throw .invalidString(
                 at: _position(at: scanner.position, scanner: scanner),
                 reason: .invalidUnicodeEscape

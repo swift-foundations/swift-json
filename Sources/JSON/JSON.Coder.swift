@@ -69,9 +69,9 @@ extension JSON {
 // MARK: - Coder.Protocol conformance
 
 extension JSON.Coder: Coder_Primitives.Coder.`Protocol` {
-    public typealias Input   = Swift.Span<Byte>
-    public typealias Buffer  = [UInt8]
-    public typealias Output  = RFC_8259.Value
+    public typealias Input = Swift.Span<Byte>
+    public typealias Buffer = [UInt8]
+    public typealias Output = RFC_8259.Value
     public typealias Failure = Either<RFC_8259.Error, JSON.Encode.Error>
 
     /// Parses a JSON value from a contiguous byte span.

@@ -74,13 +74,13 @@ extension JSON {
 }
 
 extension JSON.ND {
-    /// Internal state machine for NDJSON parsing.
     // WHY: Category D — structural Sendable workaround.
     // WHY: AsyncIteratorProtocol generic parameter blocks Sendable inference.
     // WHY: No caller invariant to uphold — data is structurally safe.
     // WHEN TO REMOVE: When compiler gains structural Sendable inference through
     // WHEN TO REMOVE: AsyncIteratorProtocol generic parameters.
     // TRACKING: unsafe-audit-findings.md Category D; SP-4.
+    /// Internal state machine for NDJSON parsing.
     @usableFromInline
     internal final class State<I: AsyncIteratorProtocol>: @unchecked Sendable
     where I.Element == UInt8 {
@@ -117,8 +117,8 @@ extension JSON.ND {
                         }
                     }
 
-                    if byte == 0x0A { // newline
-                        if buffer.isEmpty { continue } // skip empty lines
+                    if byte == 0x0A {  // newline
+                        if buffer.isEmpty { continue }  // skip empty lines
                         defer { buffer.removeAll(keepingCapacity: true) }
                         do {
                             return .success(try JSON.parse(buffer))
@@ -204,7 +204,6 @@ extension JSON.Serializable {
         self = try Self.deserialize(json)
     }
 }
-
 
 // MARK: - Streaming Support
 

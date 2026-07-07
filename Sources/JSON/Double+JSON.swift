@@ -1,4 +1,4 @@
-/// Extensions for converting JSON values to Double.
+// Extensions for converting JSON values to Double.
 
 // MARK: - Double from JSON
 

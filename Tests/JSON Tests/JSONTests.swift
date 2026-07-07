@@ -2,6 +2,7 @@
 /// swift-json
 
 import Testing
+
 @testable import JSON
 
 @Suite("JSON Tests")
@@ -62,7 +63,7 @@ struct JSONTests {
         let json: JSON = [
             "user": [
                 "name": "John",
-                "tags": ["swift", "json"]
+                "tags": ["swift", "json"],
             ]
         ]
         #expect(String(json.user.name) == "John")
@@ -117,7 +118,7 @@ struct JSONTests {
             "name": "John",
             "age": 30,
             "verified": true,
-            "tags": ["swift", "json"]
+            "tags": ["swift", "json"],
         ]
         let string = original.serialize()
         let parsed = try JSON.parse(string)

@@ -18,21 +18,21 @@
 /// directly.
 
 public import ASCII_Decimal_Parser_Primitives
-public import Lexer_Primitives
-public import RFC_8259
 @_spi(Unsafe) public import Array_Primitives
+public import Buffer_Linear_Primitive
+public import Buffer_Linear_Primitives
 // The small-column tower is `public import` because the lexer helpers are `@inlinable` and need the
 // column's conformances visible to inlined clients ([MemberImportVisibility]) — matching the existing
 // `Array_Primitives` public import. The JSON public API surface is unchanged.
 public import Buffer_Primitive
-public import Buffer_Linear_Primitive
-public import Buffer_Linear_Primitives
-public import Storage_Primitive
-public import Storage_Contiguous_Primitives
-public import Memory_Allocator_Primitive
-public import Memory_Small_Primitives
 public import Byte_Primitive
 public import Index_Primitives
+public import Lexer_Primitives
+public import Memory_Allocator_Primitive
+public import Memory_Small_Primitives
+public import RFC_8259
+public import Storage_Contiguous_Primitives
+public import Storage_Primitive
 
 // The number-lexer scratch accumulator `SmallByteArray` (the inline⊕heap small column,
 // `Memory.Small<24>`) is declared once in `JSON.Pull.Stream+Payload.swift` and shared module-wide
@@ -120,6 +120,7 @@ extension JSON.Decode.Implementation {
 
 extension JSON.Decode.Implementation {
     /// Builds `RFC_8259.Position` from the scanner's current cursor.
+    ///
     /// Line:column is computed by source scan via
     /// ``Lexer/Scanner/location(at:)`` — O(N) at the throw site,
     /// zero cost on the hot path. JSON tokens cannot contain raw
@@ -128,16 +129,17 @@ extension JSON.Decode.Implementation {
     @inlinable
     internal func currentPosition() -> RFC_8259.Position {
         let pos = scanner.position
-        return RFC_8259.Position(offset: pos, location: scanner.location(at:pos))
+        return RFC_8259.Position(offset: pos, location: scanner.location(at: pos))
     }
 
     /// Builds `RFC_8259.Position` from a previously captured cursor.
+    ///
     /// Resolves line:column via the source scan only when an error
     /// fires — the hot path captures cheap `Text.Position` and pays
     /// no tracker arithmetic per token.
     @inlinable
     internal func position(at cursor: Text.Position) -> RFC_8259.Position {
-        RFC_8259.Position(offset: cursor, location: scanner.location(at:cursor))
+        RFC_8259.Position(offset: cursor, location: scanner.location(at: cursor))
     }
 }
 
@@ -160,32 +162,32 @@ extension JSON.Decode.Implementation {
         }
 
         switch code {
-        case .leftBrace:              // {
+        case .leftBrace:  // {
             scanner.advance()
             return try parseObject()
 
-        case .leftBracket:            // [
+        case .leftBracket:  // [
             scanner.advance()
             return try parseArray()
 
-        case .quotationMark:          // "
+        case .quotationMark:  // "
             let s = try lexStringValue()
             return .string(s)
 
-        case .n:                      // n (null)
+        case .n:  // n (null)
             try expectLiteral([.n, .u, .l, .l])
             return .null
 
-        case .t:                      // t (true)
+        case .t:  // t (true)
             try expectLiteral([.t, .r, .u, .e])
             return .bool(true)
 
-        case .f:                      // f (false)
+        case .f:  // f (false)
             try expectLiteral([.f, .a, .l, .s, .e])
             return .bool(false)
 
-        case .hyphen,                 // -
-             .`0`...ASCII.Code.`9`:   // 0-9
+        case .hyphen,  // -
+            .`0`...ASCII.Code.`9`:  // 0-9
             let n = try lexNumberValue()
             return .number(n)
 
@@ -429,7 +431,7 @@ extension JSON.Decode.Implementation {
     internal mutating func lexStringValue() throws(RFC_8259.Error) -> String {
         let startCursor = scanner.position
 
-        scanner.advance() // Consume opening `"`.
+        scanner.advance()  // Consume opening `"`.
 
         stringScratch.removeAll(keepingCapacity: true)
         var isASCII = true
@@ -458,7 +460,7 @@ extension JSON.Decode.Implementation {
             // constants directly.
             let code = ASCII.Code(unchecked: byte)
             switch code {
-            case .quotationMark:                 // " - closing quote
+            case .quotationMark:  // " - closing quote
                 scanner.advance()
                 if isASCII {
                     let count = stringScratch.count
@@ -474,7 +476,7 @@ extension JSON.Decode.Implementation {
                 }
                 return String(decoding: stringScratch, as: UTF8.self)
 
-            case .reverseSlant:                  // \ - escape sequence
+            case .reverseSlant:  // \ - escape sequence
                 scanner.advance()
                 let escapeBytes = try lexEscapeSequence()
                 for b in escapeBytes {
@@ -482,7 +484,7 @@ extension JSON.Decode.Implementation {
                     stringScratch.append(b)
                 }
 
-            case .nul...ASCII.Code.us:           // Control characters (C0 range, 0x00...0x1F)
+            case .nul...ASCII.Code.us:  // Control characters (C0 range, 0x00...0x1F)
                 throw .invalidString(at: currentPosition(), reason: .controlCharacter(code))
 
             default:
@@ -511,15 +513,15 @@ extension JSON.Decode.Implementation {
         scanner.advance()
 
         switch code {
-        case .quotationMark:  return [.ascii.quotationMark]   // \"
-        case .reverseSlant:   return [.ascii.reverseSlant]    // \\
-        case .solidus:        return [.ascii.solidus]         // \/
-        case .b:              return [.ascii.bs]              // \b
-        case .f:              return [.ascii.ff]              // \f
-        case .n:              return [.ascii.lf]              // \n
-        case .r:              return [.ascii.cr]              // \r
-        case .t:              return [.ascii.htab]            // \t
-        case .u:              return try lexUnicodeEscape()   // \uXXXX
+        case .quotationMark: return [.ascii.quotationMark]  // \"
+        case .reverseSlant: return [.ascii.reverseSlant]  // \\
+        case .solidus: return [.ascii.solidus]  // \/
+        case .b: return [.ascii.bs]  // \b
+        case .f: return [.ascii.ff]  // \f
+        case .n: return [.ascii.lf]  // \n
+        case .r: return [.ascii.cr]  // \r
+        case .t: return [.ascii.htab]  // \t
+        case .u: return try lexUnicodeEscape()  // \uXXXX
         default:
             throw .invalidString(at: currentPosition(), reason: .invalidEscape(code))
         }
@@ -569,7 +571,8 @@ extension JSON.Decode.Implementation {
             }
 
             guard let lowCodePoint = parseHex(lowHex),
-                  lowCodePoint >= 0xDC00 && lowCodePoint <= 0xDFFF else {
+                lowCodePoint >= 0xDC00 && lowCodePoint <= 0xDFFF
+            else {
                 throw .invalidString(at: currentPosition(), reason: .invalidUnicodeEscape)
             }
 
@@ -625,7 +628,7 @@ extension JSON.Decode.Implementation {
             )
         }
 
-        if firstDigit == .`0` { // Leading zero
+        if firstDigit == .`0` {  // Leading zero
             bytes.append(scanner.consume())
 
             if let next: ASCII.Code = scanner.peek(), next.isDigit {

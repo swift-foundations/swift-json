@@ -47,19 +47,20 @@ extension JSON.Decode {
     ) throws(RFC_8259.Error) -> RFC_8259.Value
     where C.Element == Byte, C.Index: Sendable {
         var parserError: RFC_8259.Error? = nil
-        let fastResult: RFC_8259.Value? = bytes.withContiguousStorageIfAvailable {
-            (buffer: UnsafeBufferPointer<Byte>) -> RFC_8259.Value? in
-            let span = buffer.span
-            do {
-                return try Implementation.parse(span, maxDepth: maxDepth)
-            } catch let error as RFC_8259.Error {
-                parserError = error
-                return nil
-            } catch {
-                parserError = nil
-                return nil
-            }
-        } ?? nil
+        let fastResult: RFC_8259.Value? =
+            bytes.withContiguousStorageIfAvailable {
+                (buffer: UnsafeBufferPointer<Byte>) -> RFC_8259.Value? in
+                let span = buffer.span
+                do {
+                    return try Implementation.parse(span, maxDepth: maxDepth)
+                } catch let error as RFC_8259.Error {
+                    parserError = error
+                    return nil
+                } catch {
+                    parserError = nil
+                    return nil
+                }
+            } ?? nil
         if let value = fastResult { return value }
         if let err = parserError { throw err }
         let array = Swift.Array(bytes)

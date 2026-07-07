@@ -86,7 +86,7 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
             return try buildObject(events: &events)
         case .arrayStart:
             return try buildArray(events: &events)
-        case .objectEnd, .arrayEnd, .colon, .comma, .unknown(_):
+        case .objectEnd, .arrayEnd, .colon, .comma, .unknown:
             throw .unexpectedToken(
                 at: events.position(at: events.position),
                 found: token,

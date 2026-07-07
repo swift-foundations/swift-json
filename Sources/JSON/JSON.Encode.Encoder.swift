@@ -6,8 +6,8 @@
 /// Renamed under Arc 1.6 namespace correction: encoding lives at
 /// `JSON.*`, not at the L2 spec namespace.
 
-public import RFC_8259
 public import ASCII_Primitives
+public import RFC_8259
 
 extension JSON.Encode {
     /// Internal encoder state.
@@ -110,14 +110,14 @@ extension JSON.Encode.Encoder {
         _ string: String,
         into buffer: inout Buffer
     ) where Buffer.Element == UInt8 {
-        buffer.append(.ascii.quotationMark) // "
+        buffer.append(.ascii.quotationMark)  // "
 
         var mutableString = string
         mutableString.withUTF8 { utf8 in
             unsafe _escapeUTF8(utf8, escapeSlashes: options.escapeSlashes, into: &buffer)
         }
 
-        buffer.append(.ascii.quotationMark) // "
+        buffer.append(.ascii.quotationMark)  // "
     }
 
     /// Scans UTF-8 bytes, bulk-copies safe ranges and emits escape sequences.
@@ -138,54 +138,54 @@ extension JSON.Encode.Encoder {
 
         while unsafe cursor < end {
             switch unsafe cursor.pointee {
-            case 0x22: // "
+            case 0x22:  // "
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeQuote)
                 unsafe cursor += 1
                 unsafe mark = cursor
-            case 0x5C: // \
+            case 0x5C:  // \
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeBackslash)
                 unsafe cursor += 1
                 unsafe mark = cursor
-            case 0x2F where escapeSlashes: // /
+            case 0x2F where escapeSlashes:  // /
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeSlash)
                 unsafe cursor += 1
                 unsafe mark = cursor
-            case 0x08: // backspace
+            case 0x08:  // backspace
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeBackspace)
                 unsafe cursor += 1
                 unsafe mark = cursor
-            case 0x0C: // formfeed
+            case 0x0C:  // formfeed
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeFormfeed)
                 unsafe cursor += 1
                 unsafe mark = cursor
-            case 0x0A: // newline
+            case 0x0A:  // newline
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeNewline)
                 unsafe cursor += 1
                 unsafe mark = cursor
-            case 0x0D: // carriage return
+            case 0x0D:  // carriage return
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeCarriageReturn)
                 unsafe cursor += 1
                 unsafe mark = cursor
-            case 0x09: // tab
+            case 0x09:  // tab
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeTab)
                 unsafe cursor += 1
                 unsafe mark = cursor
-            case 0x00...0x1F: // other control chars → \uXXXX
+            case 0x00...0x1F:  // other control chars → \uXXXX
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeUnicodePrefix)
                 unsafe encodeHex(UInt16(cursor.pointee), into: &buffer)
                 unsafe cursor += 1
                 unsafe mark = cursor
             default:
-                unsafe cursor += 1 // accumulate
+                unsafe cursor += 1  // accumulate
             }
         }
 
@@ -232,7 +232,7 @@ extension JSON.Encode.Encoder {
         _ array: RFC_8259.Array,
         into buffer: inout Buffer
     ) throws(JSON.Encode.Error) where Buffer.Element == UInt8 {
-        buffer.append(.ascii.leftBracket) // [
+        buffer.append(.ascii.leftBracket)  // [
 
         guard depth < options.maxDepth else {
             throw .depthExceeded(maxDepth: options.maxDepth)
@@ -242,12 +242,12 @@ extension JSON.Encode.Encoder {
         var first = true
         for element in array {
             if !first {
-                buffer.append(.ascii.comma) // ,
+                buffer.append(.ascii.comma)  // ,
             }
             first = false
 
             if options.prettyPrint {
-                buffer.append(.ascii.lf) // newline
+                buffer.append(.ascii.lf)  // newline
                 appendIndent(into: &buffer)
             }
 
@@ -257,11 +257,11 @@ extension JSON.Encode.Encoder {
         depth -= 1
 
         if !array.isEmpty && options.prettyPrint {
-            buffer.append(.ascii.lf) // newline
+            buffer.append(.ascii.lf)  // newline
             appendIndent(into: &buffer)
         }
 
-        buffer.append(.ascii.rightBracket) // ]
+        buffer.append(.ascii.rightBracket)  // ]
     }
 
     /// Encodes an object.
@@ -270,7 +270,7 @@ extension JSON.Encode.Encoder {
         _ object: RFC_8259.Object,
         into buffer: inout Buffer
     ) throws(JSON.Encode.Error) where Buffer.Element == UInt8 {
-        buffer.append(.ascii.leftBrace) // {
+        buffer.append(.ascii.leftBrace)  // {
 
         guard depth < options.maxDepth else {
             throw .depthExceeded(maxDepth: options.maxDepth)
@@ -316,7 +316,7 @@ extension JSON.Encode.Encoder {
             appendIndent(into: &buffer)
         }
 
-        buffer.append(.ascii.rightBrace) // }
+        buffer.append(.ascii.rightBrace)  // }
     }
 
     /// Appends indentation for the current depth.

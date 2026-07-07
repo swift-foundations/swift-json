@@ -219,20 +219,21 @@ extension JSON.Serializable {
     where Bytes: Swift.Collection<Byte>, Bytes: Sendable, Bytes.Index: Sendable {
         // Fast path: contiguous storage → Span cursor.
         var parserError: JSON.Error? = nil
-        let fastResult: Self? = bytes.withContiguousStorageIfAvailable {
-            (buffer: UnsafeBufferPointer<Byte>) -> Self? in
-            let span = buffer.span
-            var stream = JSON.Span.EventStream(span)
-            do {
-                return try Self.deserialize(events: &stream)
-            } catch let error as JSON.Error {
-                parserError = error
-                return nil
-            } catch {
-                parserError = .unknown
-                return nil
-            }
-        } ?? nil
+        let fastResult: Self? =
+            bytes.withContiguousStorageIfAvailable {
+                (buffer: UnsafeBufferPointer<Byte>) -> Self? in
+                let span = buffer.span
+                var stream = JSON.Span.EventStream(span)
+                do {
+                    return try Self.deserialize(events: &stream)
+                } catch let error as JSON.Error {
+                    parserError = error
+                    return nil
+                } catch {
+                    parserError = .unknown
+                    return nil
+                }
+            } ?? nil
         if let value = fastResult { return value }
         if let err = parserError { throw err }
         // Slow path: arbitrary Collection<Byte>.
@@ -349,7 +350,7 @@ extension Bool: JSON.Serializable {
             throw .typeMismatch(expected: "bool", got: "end of input")
         }
         switch token {
-        case .`true`:  return true
+        case .`true`: return true
         case .`false`: return false
         default:
             throw .typeMismatch(expected: "bool", got: token.description)
@@ -473,7 +474,7 @@ extension Swift.Array: JSON.Serializable where Element: JSON.Serializable {
         // token, so Element.deserialize(events:) can drive its own
         // next() on a non-empty path.
         if events.peekStructural() == UInt8(ascii: "]") {
-            _ = try events.next() // consume ']'
+            _ = try events.next()  // consume ']'
             return result
         }
         // First element — Element drives its own next().
@@ -518,7 +519,7 @@ extension Dictionary: JSON.Serializable where Key == String, Value: JSON.Seriali
         try events.expectObjectStart()
         var result: [String: Value] = [:]
         if events.peekStructural() == UInt8(ascii: "}") {
-            _ = try events.next() // consume '}'
+            _ = try events.next()  // consume '}'
             return result
         }
         // First member: key (string) : value
