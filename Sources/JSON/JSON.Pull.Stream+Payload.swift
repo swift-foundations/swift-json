@@ -83,7 +83,7 @@ extension Lexer.Pull.Stream where Tokens == RFC_8259.Pull.Tokens {
 /// free function (not an extension on the spec witness) — see file
 /// header.
 @inlinable
-internal func _position(
+package func _position(
     at cursor: Text.Position,
     scanner: borrowing Lexer.Scanner
 ) -> RFC_8259.Position {
@@ -93,7 +93,7 @@ internal func _position(
 // MARK: - Module-scope lex helpers (free functions, not extensions)
 
 @inlinable
-internal func _lexString(
+package func _lexString(
     scanner: inout Lexer.Scanner,
     scratch: inout [UInt8]
 ) throws(RFC_8259.Error) -> String {
@@ -168,7 +168,7 @@ internal func _lexString(
 }
 
 @inlinable
-internal func _lexEscape(
+package func _lexEscape(
     scanner: inout Lexer.Scanner
 ) throws(RFC_8259.Error) -> [UInt8] {
     // Type-up: lift to ASCII.Code at the peek boundary.
@@ -198,7 +198,7 @@ internal func _lexEscape(
 }
 
 @inlinable
-internal func _lexUnicodeEscape(
+package func _lexUnicodeEscape(
     scanner: inout Lexer.Scanner
 ) throws(RFC_8259.Error) -> [UInt8] {
     var hex: [ASCII.Code] = []
@@ -286,7 +286,7 @@ internal func _lexUnicodeEscape(
 }
 
 @inlinable
-internal func _parseHex(_ codes: [ASCII.Code]) -> UInt32? {
+package func _parseHex(_ codes: [ASCII.Code]) -> UInt32? {
     guard codes.count == 4 else { return nil }
     var result: UInt32 = 0
     for code in codes {
@@ -297,7 +297,7 @@ internal func _parseHex(_ codes: [ASCII.Code]) -> UInt32? {
 }
 
 @inlinable
-internal func _lexNumber(
+package func _lexNumber(
     scanner: inout Lexer.Scanner
 ) throws(RFC_8259.Error) -> RFC_8259.Number {
     let startCursor = scanner.position

@@ -65,25 +65,25 @@ extension JSON.Span.EventStream {
     @inlinable
     @_lifetime(self: copy self)
     public mutating func next() throws(JSON.Error) -> Token? {
-        do { return try inner.next() } catch { throw JSON.Error(error) }
+        do throws(RFC_8259.Error) { return try inner.next() } catch { throw JSON.Error(error) }
     }
 
     @inlinable
     @_lifetime(self: copy self)
     public mutating func currentString() throws(JSON.Error) -> String {
-        do { return try inner.currentString() } catch { throw JSON.Error(error) }
+        do throws(RFC_8259.Error) { return try inner.currentString() } catch { throw JSON.Error(error) }
     }
 
     @inlinable
     @_lifetime(self: copy self)
     public mutating func currentNumber() throws(JSON.Error) -> RFC_8259.Number {
-        do { return try inner.currentNumber() } catch { throw JSON.Error(error) }
+        do throws(RFC_8259.Error) { return try inner.currentNumber() } catch { throw JSON.Error(error) }
     }
 
     @inlinable
     @_lifetime(self: copy self)
     public mutating func skipValue() throws(JSON.Error) {
-        do { try inner.skip() } catch { throw JSON.Error(error) }
+        do throws(RFC_8259.Error) { try inner.skip() } catch { throw JSON.Error(error) }
     }
 
     @inlinable

@@ -69,7 +69,7 @@ extension JSON.Encode.Encoder {
     /// Throws ``JSON/Encode/Error/depthExceeded(maxDepth:)`` when
     /// nesting exceeds ``JSON/Encode/Options/maxDepth``.
     @inlinable
-    mutating func encode<Buffer: Swift.RangeReplaceableCollection>(
+    package mutating func encode<Buffer: Swift.RangeReplaceableCollection>(
         _ value: RFC_8259.Value,
         into buffer: inout Buffer
     ) throws(JSON.Encode.Error) where Buffer.Element == UInt8 {
@@ -106,7 +106,7 @@ extension JSON.Encode.Encoder {
     /// Uses a mark-and-sweep pattern: accumulates bytes between escapes,
     /// bulk-copies safe ranges, processes escapes individually.
     @inlinable
-    mutating func encodeString<Buffer: Swift.RangeReplaceableCollection>(
+    package mutating func encodeString<Buffer: Swift.RangeReplaceableCollection>(
         _ string: String,
         into buffer: inout Buffer
     ) where Buffer.Element == UInt8 {
@@ -209,7 +209,7 @@ extension JSON.Encode.Encoder {
 
     /// Encodes a 16-bit value as 4 hex digits.
     @inlinable
-    func encodeHex<Buffer: Swift.RangeReplaceableCollection>(
+    package func encodeHex<Buffer: Swift.RangeReplaceableCollection>(
         _ value: UInt16,
         into buffer: inout Buffer
     ) where Buffer.Element == UInt8 {
@@ -228,7 +228,7 @@ extension JSON.Encode.Encoder {
 
     /// Encodes an array.
     @inlinable
-    mutating func encodeArray<Buffer: Swift.RangeReplaceableCollection>(
+    package mutating func encodeArray<Buffer: Swift.RangeReplaceableCollection>(
         _ array: RFC_8259.Array,
         into buffer: inout Buffer
     ) throws(JSON.Encode.Error) where Buffer.Element == UInt8 {
@@ -266,7 +266,7 @@ extension JSON.Encode.Encoder {
 
     /// Encodes an object.
     @inlinable
-    mutating func encodeObject<Buffer: Swift.RangeReplaceableCollection>(
+    package mutating func encodeObject<Buffer: Swift.RangeReplaceableCollection>(
         _ object: RFC_8259.Object,
         into buffer: inout Buffer
     ) throws(JSON.Encode.Error) where Buffer.Element == UInt8 {
@@ -323,7 +323,7 @@ extension JSON.Encode.Encoder {
     ///
     /// Uses pre-computed indent strings for the common case (2-space indent, depth <= 8).
     @inlinable
-    func appendIndent<Buffer: Swift.RangeReplaceableCollection>(
+    package func appendIndent<Buffer: Swift.RangeReplaceableCollection>(
         into buffer: inout Buffer
     ) where Buffer.Element == UInt8 {
         // Fast path for default 2-space indent

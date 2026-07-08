@@ -110,7 +110,7 @@ extension JSON.ND {
                         done = true
                         if buffer.isEmpty { return nil }
                         defer { buffer.removeAll() }
-                        do {
+                        do throws(JSON.Error) {
                             return .success(try JSON.parse(buffer))
                         } catch {
                             return .failure(error)
@@ -120,7 +120,7 @@ extension JSON.ND {
                     if byte == 0x0A {  // newline
                         if buffer.isEmpty { continue }  // skip empty lines
                         defer { buffer.removeAll(keepingCapacity: true) }
-                        do {
+                        do throws(JSON.Error) {
                             return .success(try JSON.parse(buffer))
                         } catch {
                             return .failure(error)
@@ -136,7 +136,7 @@ extension JSON.ND {
                     done = true
                     if buffer.isEmpty { return nil }
                     defer { buffer.removeAll() }
-                    do {
+                    do throws(JSON.Error) {
                         return .success(try JSON.parse(buffer))
                     } catch {
                         return .failure(error)

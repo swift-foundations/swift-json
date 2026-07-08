@@ -89,7 +89,7 @@ extension JSON.Coder: Coder_Primitives.Coder.`Protocol` {
         _ input: inout Swift.Span<Byte>
     ) throws(Failure) -> RFC_8259.Value {
         let value: RFC_8259.Value
-        do {
+        do throws(RFC_8259.Error) {
             value = try JSON.Decode.Implementation.parse(input, maxDepth: maxDepth)
         } catch {
             throw .left(error)
@@ -112,7 +112,7 @@ extension JSON.Coder: Coder_Primitives.Coder.`Protocol` {
         into buffer: inout [UInt8]
     ) throws(Failure) {
         var encoder = JSON.Encode.Encoder(options: encodeOptions)
-        do {
+        do throws(JSON.Encode.Error) {
             try encoder.encode(output, into: &buffer)
         } catch {
             throw .right(error)

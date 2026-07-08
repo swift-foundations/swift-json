@@ -75,7 +75,7 @@ extension JSON.Decode {
 
         @inlinable
         @_lifetime(borrow bytes)
-        internal init(_ bytes: borrowing Swift.Span<Byte>, maxDepth: Int) {
+        package init(_ bytes: borrowing Swift.Span<Byte>, maxDepth: Int) {
             self.scanner = Lexer_Primitives.Lexer.Scanner(bytes)
             self.depth = 0
             self.maxDepth = maxDepth
@@ -91,7 +91,7 @@ extension JSON.Decode {
 extension JSON.Decode.Implementation {
     /// Parses the span and returns a JSON value.
     @inlinable
-    internal static func parse(
+    package static func parse(
         _ bytes: borrowing Swift.Span<Byte>,
         maxDepth: Int
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
@@ -103,7 +103,7 @@ extension JSON.Decode.Implementation {
     /// Parses the input and returns a JSON value.
     @inlinable
     @_lifetime(self: copy self)
-    internal mutating func parse() throws(RFC_8259.Error) -> RFC_8259.Value {
+    package mutating func parse() throws(RFC_8259.Error) -> RFC_8259.Value {
         let value = try parseValue()
 
         // Ensure no trailing content (except whitespace).
@@ -127,7 +127,7 @@ extension JSON.Decode.Implementation {
     /// newlines (RFC 8259 §7) so the parser skips per-byte tracker
     /// updates in `skipWhitespace`.
     @inlinable
-    internal func currentPosition() -> RFC_8259.Position {
+    package func currentPosition() -> RFC_8259.Position {
         let pos = scanner.position
         return RFC_8259.Position(offset: pos, location: scanner.location(at: pos))
     }
@@ -138,7 +138,7 @@ extension JSON.Decode.Implementation {
     /// fires — the hot path captures cheap `Text.Position` and pays
     /// no tracker arithmetic per token.
     @inlinable
-    internal func position(at cursor: Text.Position) -> RFC_8259.Position {
+    package func position(at cursor: Text.Position) -> RFC_8259.Position {
         RFC_8259.Position(offset: cursor, location: scanner.location(at: cursor))
     }
 }
@@ -152,7 +152,7 @@ extension JSON.Decode.Implementation {
     /// — no token-level lookahead, no `Optional<Token>` storage.
     @inlinable
     @_lifetime(self: copy self)
-    internal mutating func parseValue() throws(RFC_8259.Error) -> RFC_8259.Value {
+    package mutating func parseValue() throws(RFC_8259.Error) -> RFC_8259.Value {
         skipWhitespace()
 
         // Type-up: lift to ASCII.Code at the peek boundary so cases match
@@ -206,7 +206,7 @@ extension JSON.Decode.Implementation {
 extension JSON.Decode.Implementation {
     @inlinable
     @_lifetime(self: copy self)
-    internal mutating func parseArray() throws(RFC_8259.Error) -> RFC_8259.Value {
+    package mutating func parseArray() throws(RFC_8259.Error) -> RFC_8259.Value {
         depth += 1
         if depth > maxDepth {
             throw .depthExceeded(at: currentPosition(), limit: maxDepth)
@@ -261,7 +261,7 @@ extension JSON.Decode.Implementation {
 extension JSON.Decode.Implementation {
     @inlinable
     @_lifetime(self: copy self)
-    internal mutating func parseObject() throws(RFC_8259.Error) -> RFC_8259.Value {
+    package mutating func parseObject() throws(RFC_8259.Error) -> RFC_8259.Value {
         depth += 1
         if depth > maxDepth {
             throw .depthExceeded(at: currentPosition(), limit: maxDepth)
@@ -307,7 +307,7 @@ extension JSON.Decode.Implementation {
     /// Parses a single object member (key: value).
     @inlinable
     @_lifetime(self: copy self)
-    internal mutating func parseMember() throws(RFC_8259.Error) -> (key: String, value: RFC_8259.Value) {
+    package mutating func parseMember() throws(RFC_8259.Error) -> (key: String, value: RFC_8259.Value) {
         skipWhitespace()
         // Type-up: lift to ASCII.Code at the peek boundary.
         guard let firstCode: ASCII.Code = scanner.peek() else {
@@ -363,7 +363,7 @@ extension JSON.Decode.Implementation {
     /// O(N) ``Lexer/Scanner/location(at:)`` scan at throw sites.
     @inlinable
     @_lifetime(self: copy self)
-    internal mutating func skipWhitespace() {
+    package mutating func skipWhitespace() {
         while let byte = scanner.peek() {
             // Inline the whitespace check: space (0x20), tab (0x09),
             // LF (0x0A), CR (0x0D). RFC 8259 §2.
@@ -394,7 +394,7 @@ extension JSON.Decode.Implementation {
     /// than the failing byte.
     @inlinable
     @_lifetime(self: copy self)
-    internal mutating func expectLiteral(_ expected: [ASCII.Code]) throws(RFC_8259.Error) {
+    package mutating func expectLiteral(_ expected: [ASCII.Code]) throws(RFC_8259.Error) {
         let startCursor = scanner.position
         for expectedCode in expected {
             // Type-up: lift to ASCII.Code at the peek boundary.
@@ -428,7 +428,7 @@ extension JSON.Decode.Implementation {
     /// hot path doesn't materialise `RFC_8259.Position` per string.
     @inlinable
     @_lifetime(self: copy self)
-    internal mutating func lexStringValue() throws(RFC_8259.Error) -> String {
+    package mutating func lexStringValue() throws(RFC_8259.Error) -> String {
         let startCursor = scanner.position
 
         scanner.advance()  // Consume opening `"`.
@@ -504,7 +504,7 @@ extension JSON.Decode.Implementation {
     /// Lexes an escape sequence after the backslash.
     @inlinable
     @_lifetime(self: copy self)
-    internal mutating func lexEscapeSequence() throws(RFC_8259.Error) -> [UInt8] {
+    package mutating func lexEscapeSequence() throws(RFC_8259.Error) -> [UInt8] {
         // Type-up: lift to ASCII.Code at the peek boundary.
         guard let code: ASCII.Code = scanner.peek() else {
             throw .unexpectedEndOfInput(at: currentPosition(), expected: .value)
@@ -530,7 +530,7 @@ extension JSON.Decode.Implementation {
     /// Lexes a \uXXXX Unicode escape.
     @inlinable
     @_lifetime(self: copy self)
-    internal mutating func lexUnicodeEscape() throws(RFC_8259.Error) -> [UInt8] {
+    package mutating func lexUnicodeEscape() throws(RFC_8259.Error) -> [UInt8] {
         var hex: [ASCII.Code] = []
         hex.reserveCapacity(4)
 
@@ -591,7 +591,7 @@ extension JSON.Decode.Implementation {
 
     /// Parses 4 hex codes to a UInt32.
     @inlinable
-    internal func parseHex(_ codes: [ASCII.Code]) -> UInt32? {
+    package func parseHex(_ codes: [ASCII.Code]) -> UInt32? {
         guard codes.count == 4 else { return nil }
         var result: UInt32 = 0
         for code in codes {
@@ -610,7 +610,7 @@ extension JSON.Decode.Implementation {
     /// no Token wrapping.
     @inlinable
     @_lifetime(self: copy self)
-    internal mutating func lexNumberValue() throws(RFC_8259.Error) -> RFC_8259.Number {
+    package mutating func lexNumberValue() throws(RFC_8259.Error) -> RFC_8259.Number {
         let startCursor = scanner.position
         var bytes = SmallByteArray(initialCapacity: Index<Byte>.Count(UInt(24)))
 
@@ -693,7 +693,7 @@ extension JSON.Decode.Implementation {
 
         if isFloat {
             let value: Double
-            do {
+            do throws(ASCII.Decimal.Float.Error) {
                 value = try ASCII.Decimal.Float.parse(span)
             } catch {
                 throw .invalidNumber(

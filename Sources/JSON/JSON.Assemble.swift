@@ -43,7 +43,7 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
     /// Per A0 §9.3, this short-circuit is the BINDING constraint that
     /// makes the §4.3 default-fallback non-regressing.
     @inlinable
-    internal static func consume(
+    package static func consume(
         bytes: Swift.Span<Byte>,
         limit: Int
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
@@ -52,7 +52,7 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
 
     /// Slow-path — drives the event stream to rebuild the tree.
     @inlinable
-    internal static func build(
+    package static func build(
         events: inout Lexer.Pull.Stream<RFC_8259.Pull.Tokens>
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
         guard let token = try events.next() else {
@@ -65,7 +65,7 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
     }
 
     @inlinable
-    internal static func buildValue(
+    package static func buildValue(
         forToken token: RFC_8259.Token.Kind,
         events: inout Lexer.Pull.Stream<RFC_8259.Pull.Tokens>
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
@@ -96,7 +96,7 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
     }
 
     @inlinable
-    internal static func buildObject(
+    package static func buildObject(
         events: inout Lexer.Pull.Stream<RFC_8259.Pull.Tokens>
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
         var members: [(key: String, value: RFC_8259.Value)] = []
@@ -157,7 +157,7 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
     }
 
     @inlinable
-    internal static func buildArray(
+    package static func buildArray(
         events: inout Lexer.Pull.Stream<RFC_8259.Pull.Tokens>
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
         var elements: [RFC_8259.Value] = []
@@ -194,7 +194,7 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
     }
 
     @inlinable
-    internal static func expectColon(
+    package static func expectColon(
         _ events: inout Lexer.Pull.Stream<RFC_8259.Pull.Tokens>
     ) throws(RFC_8259.Error) {
         guard let token = try events.next() else {
@@ -220,7 +220,7 @@ extension JSON.Assemble {
     /// Preserves the call-site contract at
     /// `JSON.Serializable.deserialize(events:)`.
     @inlinable
-    internal static func from(_ events: inout JSON.Span.EventStream) throws(JSON.Error) -> JSON {
+    package static func from(_ events: inout JSON.Span.EventStream) throws(JSON.Error) -> JSON {
         do throws(RFC_8259.Error) {
             let value = try Lexer.Pull.Assemble.from(&events.inner, strategy: JSON.Assemble.self)
             return JSON(value)

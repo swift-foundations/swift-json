@@ -40,37 +40,6 @@ extension JSON {
         /// The maximum nesting depth.
         @usableFromInline
         internal let maxDepth: Int = 512
-
-        /// Parses JSON from a string.
-        ///
-        /// - Parameter string: The JSON string to parse.
-        /// - Returns: The parsed JSON value.
-        /// - Throws: `JSON.Error` if parsing fails.
-        @inlinable
-        public func callAsFunction(_ string: String) throws(JSON.Error) -> JSON {
-            do {
-                let value = try JSON.Decode.parse(string, maxDepth: maxDepth)
-                return JSON(value)
-            } catch {
-                throw JSON.Error(error)
-            }
-        }
-
-        /// Parses JSON from UTF-8 bytes.
-        ///
-        /// - Parameter bytes: The UTF-8 encoded JSON bytes.
-        /// - Returns: The parsed JSON value.
-        /// - Throws: `JSON.Error` if parsing fails.
-        @inlinable
-        public func callAsFunction<Bytes>(_ bytes: Bytes) throws(JSON.Error) -> JSON
-        where Bytes: Swift.Collection<Byte>, Bytes: Sendable, Bytes.Index: Sendable {
-            do {
-                let value = try JSON.Decode.parse(bytes, maxDepth: maxDepth)
-                return JSON(value)
-            } catch {
-                throw JSON.Error(error)
-            }
-        }
     }
 
     /// Accessor for parse operation variants.
@@ -94,6 +63,41 @@ extension JSON {
     /// }
     /// ```
     public static var parse: Parse { Parse() }
+}
+
+// MARK: - Parse callAsFunction
+
+extension JSON.Parse {
+    /// Parses JSON from a string.
+    ///
+    /// - Parameter string: The JSON string to parse.
+    /// - Returns: The parsed JSON value.
+    /// - Throws: `JSON.Error` if parsing fails.
+    @inlinable
+    public func callAsFunction(_ string: String) throws(JSON.Error) -> JSON {
+        do throws(RFC_8259.Error) {
+            let value = try JSON.Decode.parse(string, maxDepth: maxDepth)
+            return JSON(value)
+        } catch {
+            throw JSON.Error(error)
+        }
+    }
+
+    /// Parses JSON from UTF-8 bytes.
+    ///
+    /// - Parameter bytes: The UTF-8 encoded JSON bytes.
+    /// - Returns: The parsed JSON value.
+    /// - Throws: `JSON.Error` if parsing fails.
+    @inlinable
+    public func callAsFunction<Bytes>(_ bytes: Bytes) throws(JSON.Error) -> JSON
+    where Bytes: Swift.Collection<Byte>, Bytes: Sendable, Bytes.Index: Sendable {
+        do throws(RFC_8259.Error) {
+            let value = try JSON.Decode.parse(bytes, maxDepth: maxDepth)
+            return JSON(value)
+        } catch {
+            throw JSON.Error(error)
+        }
+    }
 }
 
 // MARK: - Prepared Parser
@@ -177,36 +181,40 @@ extension JSON {
         internal init(maxDepth: Int) {
             self.maxDepth = maxDepth
         }
+    }
+}
 
-        /// Parses JSON from a string.
-        ///
-        /// - Parameter string: The JSON string to parse.
-        /// - Returns: The parsed JSON value.
-        /// - Throws: `JSON.Error` if parsing fails.
-        @inlinable
-        public func parse(_ string: String) throws(JSON.Error) -> JSON {
-            do {
-                let value = try JSON.Decode.parse(string, maxDepth: maxDepth)
-                return JSON(value)
-            } catch {
-                throw JSON.Error(error)
-            }
+// MARK: - Prepared parse
+
+extension JSON.Prepared {
+    /// Parses JSON from a string.
+    ///
+    /// - Parameter string: The JSON string to parse.
+    /// - Returns: The parsed JSON value.
+    /// - Throws: `JSON.Error` if parsing fails.
+    @inlinable
+    public func parse(_ string: String) throws(JSON.Error) -> JSON {
+        do throws(RFC_8259.Error) {
+            let value = try JSON.Decode.parse(string, maxDepth: maxDepth)
+            return JSON(value)
+        } catch {
+            throw JSON.Error(error)
         }
+    }
 
-        /// Parses JSON from UTF-8 bytes.
-        ///
-        /// - Parameter bytes: The UTF-8 encoded JSON bytes.
-        /// - Returns: The parsed JSON value.
-        /// - Throws: `JSON.Error` if parsing fails.
-        @inlinable
-        public func parse<Bytes>(_ bytes: Bytes) throws(JSON.Error) -> JSON
-        where Bytes: Swift.Collection<Byte>, Bytes: Sendable, Bytes.Index: Sendable {
-            do {
-                let value = try JSON.Decode.parse(bytes, maxDepth: maxDepth)
-                return JSON(value)
-            } catch {
-                throw JSON.Error(error)
-            }
+    /// Parses JSON from UTF-8 bytes.
+    ///
+    /// - Parameter bytes: The UTF-8 encoded JSON bytes.
+    /// - Returns: The parsed JSON value.
+    /// - Throws: `JSON.Error` if parsing fails.
+    @inlinable
+    public func parse<Bytes>(_ bytes: Bytes) throws(JSON.Error) -> JSON
+    where Bytes: Swift.Collection<Byte>, Bytes: Sendable, Bytes.Index: Sendable {
+        do throws(RFC_8259.Error) {
+            let value = try JSON.Decode.parse(bytes, maxDepth: maxDepth)
+            return JSON(value)
+        } catch {
+            throw JSON.Error(error)
         }
     }
 }
@@ -236,36 +244,40 @@ extension JSON {
         internal init(maxDepth: Int) {
             self.maxDepth = maxDepth
         }
+    }
+}
 
-        /// Parses JSON from a string with located errors.
-        ///
-        /// - Parameter string: The JSON string to parse.
-        /// - Returns: The parsed JSON value.
-        /// - Throws: `Parser.Error.Located<JSON.Error>` if parsing fails.
-        @inlinable
-        public func parse(_ string: String) throws(Parser.Error.Located<JSON.Error>) -> JSON {
-            do {
-                let value = try JSON.Decode.parse(string, maxDepth: maxDepth)
-                return JSON(value)
-            } catch let error {
-                throw Parser.Error.Located<JSON.Error>(JSON.Error(error), at: _offset(of: error))
-            }
+// MARK: - Located parse
+
+extension JSON.Located {
+    /// Parses JSON from a string with located errors.
+    ///
+    /// - Parameter string: The JSON string to parse.
+    /// - Returns: The parsed JSON value.
+    /// - Throws: `Parser.Error.Located<JSON.Error>` if parsing fails.
+    @inlinable
+    public func parse(_ string: String) throws(Parser.Error.Located<JSON.Error>) -> JSON {
+        do throws(RFC_8259.Error) {
+            let value = try JSON.Decode.parse(string, maxDepth: maxDepth)
+            return JSON(value)
+        } catch let error {
+            throw Parser.Error.Located<JSON.Error>(JSON.Error(error), at: _offset(of: error))
         }
+    }
 
-        /// Parses JSON from UTF-8 bytes with located errors.
-        ///
-        /// - Parameter bytes: The UTF-8 encoded JSON bytes.
-        /// - Returns: The parsed JSON value.
-        /// - Throws: `Parser.Error.Located<JSON.Error>` if parsing fails.
-        @inlinable
-        public func parse<Bytes>(_ bytes: Bytes) throws(Parser.Error.Located<JSON.Error>) -> JSON
-        where Bytes: Swift.Collection<Byte>, Bytes: Sendable, Bytes.Index: Sendable {
-            do {
-                let value = try JSON.Decode.parse(bytes, maxDepth: maxDepth)
-                return JSON(value)
-            } catch let error {
-                throw Parser.Error.Located<JSON.Error>(JSON.Error(error), at: _offset(of: error))
-            }
+    /// Parses JSON from UTF-8 bytes with located errors.
+    ///
+    /// - Parameter bytes: The UTF-8 encoded JSON bytes.
+    /// - Returns: The parsed JSON value.
+    /// - Throws: `Parser.Error.Located<JSON.Error>` if parsing fails.
+    @inlinable
+    public func parse<Bytes>(_ bytes: Bytes) throws(Parser.Error.Located<JSON.Error>) -> JSON
+    where Bytes: Swift.Collection<Byte>, Bytes: Sendable, Bytes.Index: Sendable {
+        do throws(RFC_8259.Error) {
+            let value = try JSON.Decode.parse(bytes, maxDepth: maxDepth)
+            return JSON(value)
+        } catch let error {
+            throw Parser.Error.Located<JSON.Error>(JSON.Error(error), at: _offset(of: error))
         }
     }
 }

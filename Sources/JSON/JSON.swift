@@ -235,7 +235,7 @@ extension JSON {
     /// - Throws: `JSON.Error` if parsing fails.
     @inlinable
     public static func parse(_ string: String) throws(JSON.Error) -> JSON {
-        do {
+        do throws(RFC_8259.Error) {
             let value = try JSON.Decode.parse(string)
             return JSON(value)
         } catch {
@@ -251,7 +251,7 @@ extension JSON {
     @inlinable
     public static func parse<Bytes>(_ bytes: Bytes) throws(JSON.Error) -> JSON
     where Bytes: Swift.Collection<Byte>, Bytes: Sendable, Bytes.Index: Sendable {
-        do {
+        do throws(RFC_8259.Error) {
             let value = try JSON.Decode.parse(bytes)
             return JSON(value)
         } catch {
