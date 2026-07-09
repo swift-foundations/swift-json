@@ -165,7 +165,7 @@ struct StreamTests {
             continuation.finish()
         }
 
-        do {
+        do throws(JSON.Error) {
             _ = try await JSON.parse(collecting: bytes)
             Issue.record("Expected error for empty input")
         } catch {

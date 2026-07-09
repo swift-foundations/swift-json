@@ -145,21 +145,6 @@ struct SerializableEventStreamTests {
         let name: String
         let age: Int
 
-        static func serialize(_ value: FooDefault) -> JSON {
-            ["name": .string(value.name), "age": .number(value.age)]
-        }
-
-        static func deserialize(_ json: JSON) throws(JSON.Error) -> FooDefault {
-            let name = String(json.name)
-            guard !name.isEmpty else {
-                throw .missingKey("name")
-            }
-            guard let age = Int(json.age) else {
-                throw .missingKey("age")
-            }
-            return FooDefault(name: name, age: age)
-        }
-
         // Deliberately does NOT override deserialize(events:) — uses
         // the protocol-extension default.
     }
@@ -184,42 +169,6 @@ struct SerializableEventStreamTests {
 
     struct FooEventGrain: JSON.Serializable {
         let name: String
-
-        static func serialize(_ value: FooEventGrain) -> JSON {
-            ["name": .string(value.name)]
-        }
-
-        static func deserialize(_ json: JSON) throws(JSON.Error) -> FooEventGrain {
-            let name = String(json.name)
-            guard !name.isEmpty else {
-                throw .missingKey("name")
-            }
-            return FooEventGrain(name: name)
-        }
-
-        static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> FooEventGrain {
-            try events.expectObjectStart()
-            var name: String? = nil
-            while let token = try events.next() {
-                if token == .objectEnd { break }
-                guard token == .string else {
-                    if token == .comma { continue }
-                    throw .invalidSyntax(message: "expected key", location: events.position().location)
-                }
-                let key = try events.currentString()
-                try events.expectColon()
-                switch key {
-                case "name":
-                    name = try String.deserialize(events: &events)
-                default:
-                    try events.skipValue()
-                }
-            }
-            guard let name = name else {
-                throw .missingKey("name")
-            }
-            return FooEventGrain(name: name)
-        }
     }
 
     @Test
@@ -261,5 +210,60 @@ struct SerializableEventStreamTests {
         let bytes = ContiguousArray<Byte>("42".utf8.map(Byte.init))
         let result = try Int.from(eventDecodingJsonBytes: bytes)
         #expect(result == 42)
+    }
+}
+
+extension SerializableEventStreamTests.FooDefault {
+    static func serialize(_ value: SerializableEventStreamTests.FooDefault) -> JSON {
+        ["name": .string(value.name), "age": .number(value.age)]
+    }
+
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> SerializableEventStreamTests.FooDefault {
+        let name = String(json.name)
+        guard !name.isEmpty else {
+            throw .missingKey("name")
+        }
+        guard let age = Int(json.age) else {
+            throw .missingKey("age")
+        }
+        return SerializableEventStreamTests.FooDefault(name: name, age: age)
+    }
+}
+
+extension SerializableEventStreamTests.FooEventGrain {
+    static func serialize(_ value: SerializableEventStreamTests.FooEventGrain) -> JSON {
+        ["name": .string(value.name)]
+    }
+
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> SerializableEventStreamTests.FooEventGrain {
+        let name = String(json.name)
+        guard !name.isEmpty else {
+            throw .missingKey("name")
+        }
+        return SerializableEventStreamTests.FooEventGrain(name: name)
+    }
+
+    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> SerializableEventStreamTests.FooEventGrain {
+        try events.expectObjectStart()
+        var name: String? = nil
+        while let token = try events.next() {
+            if token == .objectEnd { break }
+            guard token == .string else {
+                if token == .comma { continue }
+                throw .invalidSyntax(message: "expected key", location: events.position().location)
+            }
+            let key = try events.currentString()
+            try events.expectColon()
+            switch key {
+            case "name":
+                name = try String.deserialize(events: &events)
+            default:
+                try events.skipValue()
+            }
+        }
+        guard let name = name else {
+            throw .missingKey("name")
+        }
+        return SerializableEventStreamTests.FooEventGrain(name: name)
     }
 }

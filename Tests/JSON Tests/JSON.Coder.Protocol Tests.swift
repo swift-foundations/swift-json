@@ -32,11 +32,11 @@ extension JSON.Coder {
             let bytes: [Byte] = "{not json".utf8.map(Byte.init)
             let coder = JSON.Coder()
             var span = bytes.span
-            do {
+            do throws(JSON.Coder.Failure) {
                 _ = try coder.parse(&span)
                 Issue.record("Expected parse to throw on malformed JSON")
-            } catch let failure {
-                switch failure {
+            } catch {
+                switch error {
                 case .left:
                     break
                 case .right:

@@ -399,14 +399,14 @@ extension JSON.Decode {
         func `Span lazy position computes line/column on error`() throws {
             // Input has the error on line 3, column 1 (the unterminated string).
             let json = "{\n  \"good\": 1,\n  \"bad\""  // missing colon + value + brace
-            do {
+            do throws(RFC_8259.Error) {
                 _ = try JSON.Decode.parse(json)
                 Issue.record("Expected parse error")
-            } catch let err as RFC_8259.Error {
+            } catch {
                 // We don't care which exact error fires; just that the
                 // position is at a sensible line.
                 let offset: Int
-                switch err {
+                switch error {
                 case .unexpectedToken(let pos, _, _): offset = Int(bitPattern: pos.offset)
                 case .unexpectedEndOfInput(let pos, _): offset = Int(bitPattern: pos.offset)
                 case .invalidNumber(let pos, _): offset = Int(bitPattern: pos.offset)
@@ -432,12 +432,12 @@ extension JSON.Decode {
             //
             // Input: `{\n  "bad"` — unterminated key string on line 2.
             let json = "{\n  \"bad"
-            do {
+            do throws(RFC_8259.Error) {
                 _ = try JSON.Decode.parse(json)
                 Issue.record("Expected parse error")
-            } catch let err as RFC_8259.Error {
+            } catch {
                 let location: Text.Location
-                switch err {
+                switch error {
                 case .unexpectedToken(let pos, _, _): location = pos.location
                 case .unexpectedEndOfInput(let pos, _): location = pos.location
                 case .invalidNumber(let pos, _): location = pos.location
