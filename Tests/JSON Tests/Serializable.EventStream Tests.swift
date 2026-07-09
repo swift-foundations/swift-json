@@ -20,8 +20,8 @@ import Testing
 
 @testable import JSON
 
-@Suite("Serializable EventStream Tests")
-struct SerializableEventStreamTests {
+@Suite
+struct `Serializable EventStream Tests` {
 
     // MARK: - Foundational conformers via event-grain
 
@@ -213,12 +213,12 @@ struct SerializableEventStreamTests {
     }
 }
 
-extension SerializableEventStreamTests.FooDefault {
-    static func serialize(_ value: SerializableEventStreamTests.FooDefault) -> JSON {
+extension `Serializable EventStream Tests`.FooDefault {
+    static func serialize(_ value: `Serializable EventStream Tests`.FooDefault) -> JSON {
         ["name": .string(value.name), "age": .number(value.age)]
     }
 
-    static func deserialize(_ json: JSON) throws(JSON.Error) -> SerializableEventStreamTests.FooDefault {
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> `Serializable EventStream Tests`.FooDefault {
         let name = String(json.name)
         guard !name.isEmpty else {
             throw .missingKey("name")
@@ -226,24 +226,24 @@ extension SerializableEventStreamTests.FooDefault {
         guard let age = Int(json.age) else {
             throw .missingKey("age")
         }
-        return SerializableEventStreamTests.FooDefault(name: name, age: age)
+        return `Serializable EventStream Tests`.FooDefault(name: name, age: age)
     }
 }
 
-extension SerializableEventStreamTests.FooEventGrain {
-    static func serialize(_ value: SerializableEventStreamTests.FooEventGrain) -> JSON {
+extension `Serializable EventStream Tests`.FooEventGrain {
+    static func serialize(_ value: `Serializable EventStream Tests`.FooEventGrain) -> JSON {
         ["name": .string(value.name)]
     }
 
-    static func deserialize(_ json: JSON) throws(JSON.Error) -> SerializableEventStreamTests.FooEventGrain {
+    static func deserialize(_ json: JSON) throws(JSON.Error) -> `Serializable EventStream Tests`.FooEventGrain {
         let name = String(json.name)
         guard !name.isEmpty else {
             throw .missingKey("name")
         }
-        return SerializableEventStreamTests.FooEventGrain(name: name)
+        return `Serializable EventStream Tests`.FooEventGrain(name: name)
     }
 
-    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> SerializableEventStreamTests.FooEventGrain {
+    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> `Serializable EventStream Tests`.FooEventGrain {
         try events.expectObjectStart()
         var name: String? = nil
         while let token = try events.next() {
@@ -264,6 +264,6 @@ extension SerializableEventStreamTests.FooEventGrain {
         guard let name = name else {
             throw .missingKey("name")
         }
-        return SerializableEventStreamTests.FooEventGrain(name: name)
+        return `Serializable EventStream Tests`.FooEventGrain(name: name)
     }
 }

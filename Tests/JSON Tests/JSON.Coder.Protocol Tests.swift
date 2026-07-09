@@ -15,7 +15,7 @@ import Testing
 
 extension JSON.Coder {
     @Suite("JSON.Coder.Protocol")
-    struct ProtocolTests {
+    struct Test {
 
         @Test
         func `parse via Coder.Protocol surface returns RFC_8259.Value`() throws {
