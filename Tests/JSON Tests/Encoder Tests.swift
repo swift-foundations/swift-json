@@ -8,8 +8,8 @@ import Testing
 @testable import JSON
 
 extension JSON.Encode {
-    @Suite("Encoder Tests")
-    struct Tests {
+    @Suite
+    struct Test {
 
         // MARK: - Simple Values
 

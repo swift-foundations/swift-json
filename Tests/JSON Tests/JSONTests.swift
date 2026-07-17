@@ -6,7 +6,7 @@ import Testing
 @testable import JSON
 
 extension JSON {
-    @Suite("JSON Tests")
+    @Suite
     struct Test {
 
         // MARK: - Literals

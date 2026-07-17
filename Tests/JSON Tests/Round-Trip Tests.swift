@@ -8,8 +8,8 @@ import Testing
 @testable import JSON
 
 extension JSON.Coder {
-    @Suite("Round-Trip Tests")
-    struct Tests {
+    @Suite
+    struct Test {
 
         @Test
         func `Round-trip simple values`() throws {

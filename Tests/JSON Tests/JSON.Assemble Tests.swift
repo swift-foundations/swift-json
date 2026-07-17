@@ -22,8 +22,8 @@ import Testing
 @testable import JSON
 
 extension JSON.Assemble {
-    @Suite("JSON Assemble Tests")
-    struct Tests {
+    @Suite
+    struct Test {
 
         @Test
         func `Assemble.from short-circuits at position 0 and returns parsed value`() throws {

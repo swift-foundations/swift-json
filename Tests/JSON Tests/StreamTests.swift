@@ -5,8 +5,8 @@ import Testing
 
 @testable import JSON
 
-@Suite("Stream Tests")
-struct StreamTests {
+@Suite
+struct Test {
 
     // MARK: - NDJSON Streaming
 

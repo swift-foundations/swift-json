@@ -16,8 +16,8 @@ import Testing
 @testable import JSON
 
 extension RFC_8259.Pull.Tokens {
-    @Suite("JSON Pull Stream Tests")
-    struct Tests {
+    @Suite
+    struct Test {
 
         // MARK: - Token.Kind emission
 

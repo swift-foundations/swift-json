@@ -8,8 +8,8 @@ import Testing
 @testable import JSON
 
 extension RFC_8259 {
-    @Suite("RFC 8259 Conformance Tests")
-    struct Conformance {
+    @Suite
+    struct `RFC 8259 Conformance Tests` {
 
         // MARK: - Error Cases: Numbers
 

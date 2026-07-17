@@ -14,7 +14,7 @@ import Testing
 @testable import JSON
 
 extension JSON.Coder {
-    @Suite("JSON.Coder.Protocol")
+    @Suite
     struct Test {
 
         @Test

@@ -12,8 +12,8 @@ import Testing
 @testable import JSON
 
 extension JSON.Decode {
-    @Suite("Lexer.Span Tests")
-    struct Tests {
+    @Suite
+    struct Test {
 
         // MARK: - Structural tokens via Span
 
