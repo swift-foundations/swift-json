@@ -122,7 +122,7 @@ extension JSON.Coder: Coder_Primitives.Coder.`Protocol` {
 
 // MARK: - Codable attachment on RFC_8259.Value
 
-extension RFC_8259.Value: @retroactive Coder_Primitives.Codable {
+extension RFC_8259.Value: @retroactive Coder_Primitives.Coder.Codable {
     /// CANONICAL-ATTACHMENT JUSTIFICATION [FAM-003]:
     /// `RFC_8259.Value` has exactly one inherent canonical codec — JSON.
     /// The associatedtype commitment to `JSON.Coder` is structurally
