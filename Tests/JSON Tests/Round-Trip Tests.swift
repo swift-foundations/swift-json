@@ -9,7 +9,7 @@ import Testing
 
 extension JSON.Coder {
     @Suite
-    struct Test {
+    struct RoundTrip {
 
         @Test
         func `Round-trip simple values`() throws {

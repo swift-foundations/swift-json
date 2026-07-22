@@ -12,7 +12,11 @@ let package = Package(
         .visionOS(.v26)
     ],
     products: [
-        .library(name: "JSON", targets: ["JSON"])
+        .library(name: "JSON", targets: ["JSON"]),
+        .library(
+            name: "JSON Foundation Integration",
+            targets: ["JSON Foundation Integration"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/swift-ietf/swift-rfc-8259.git", branch: "main"),
@@ -62,10 +66,24 @@ let package = Package(
                 .product(name: "Async", package: "swift-async")
             ]
         ),
+        .target(
+            name: "JSON Foundation Integration",
+            dependencies: [
+                "JSON",
+                .product(name: "Coder Primitives", package: "swift-coder-primitives"),
+            ]
+        ),
         .testTarget(
             name: "JSON Tests",
             dependencies: [
                 "JSON",
+            ]
+        ),
+        .testTarget(
+            name: "JSON Foundation Integration Tests",
+            dependencies: [
+                "JSON",
+                "JSON Foundation Integration",
             ]
         ),
     ],
