@@ -65,7 +65,7 @@ extension JSON.Decoder: Swift.Decoder {
 
     internal func container<Key: CodingKey>(
         keyedBy type: Key.Type
-    ) throws(DecodingError) ->KeyedDecodingContainer<Key> {
+    ) throws(DecodingError) -> KeyedDecodingContainer<Key> {
         guard case .object(let object) = value else {
             throw mismatch(KeyedDecodingContainer<Key>.self)
         }
@@ -74,14 +74,14 @@ extension JSON.Decoder: Swift.Decoder {
         )
     }
 
-    internal func unkeyedContainer() throws(DecodingError) ->any UnkeyedDecodingContainer {
+    internal func unkeyedContainer() throws(DecodingError) -> any UnkeyedDecodingContainer {
         guard case .array(let array) = value else {
             throw mismatch((any UnkeyedDecodingContainer).self)
         }
         return JSON.Decoder.Unkeyed(array: array, codingPath: codingPath)
     }
 
-    internal func singleValueContainer() throws(DecodingError) ->any SingleValueDecodingContainer {
+    internal func singleValueContainer() throws(DecodingError) -> any SingleValueDecodingContainer {
         JSON.Decoder.Single(decoder: self)
     }
 }
