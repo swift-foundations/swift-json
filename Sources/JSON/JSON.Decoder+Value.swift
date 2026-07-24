@@ -106,23 +106,31 @@ extension JSON.Decoder {
         }
     }
 
-    /// Unwraps a floating-point value.
+    /// Unwraps a floating-point value, refusing overflow to infinity.
     ///
-    /// All three arms convert, because every JSON number is a number the
-    /// requested binary floating-point type can approximate. Conversion
-    /// follows IEEE 754 round-to-nearest: `Double` cannot hold every
-    /// `Int64` beyond 2^53, and `Float` cannot hold every `Double`. That
-    /// rounding is a property of the REQUESTED type, not a silent widening
-    /// of the JSON value, so it is admitted rather than refused.
+    /// Rounding is admitted: `Double` cannot hold every `Int64` past 2^53,
+    /// and `Float` cannot hold every `Double`. Losing low-order bits is a
+    /// property of the REQUESTED type under IEEE 754 round-to-nearest, not
+    /// a distortion of the JSON value, so a finite result is returned as-is.
+    ///
+    /// OVERFLOW is not rounding. RFC 8259 has no infinity literal, so every
+    /// JSON number is finite; a conversion that yields ±infinity has
+    /// replaced a finite quantity with one that is not a number at all
+    /// (`1e300` requested as `Float`). That is refused rather than returned.
+    /// Underflow to zero remains admitted — it is ordinary rounding toward
+    /// the nearest representable value.
     internal func floating<T: BinaryFloatingPoint>(
         _ type: T.Type
     ) throws(DecodingError) -> T {
         guard case .number(let number) = value else { throw mismatch(type) }
+        let converted: T
         switch number.parsed {
-        case .integer(let signed): return T(signed)
-        case .unsigned(let unsigned): return T(unsigned)
-        case .float(let float): return T(float)
+        case .integer(let signed): converted = T(signed)
+        case .unsigned(let unsigned): converted = T(unsigned)
+        case .float(let float): converted = T(float)
         }
+        guard converted.isFinite else { throw overflow(number, type) }
+        return converted
     }
 
     /// The error for a number outside the requested type's range.

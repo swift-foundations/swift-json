@@ -97,6 +97,72 @@ extension Cursor {
     }
 }
 
+/// Probes one array element with the WRONG type, then the right one,
+/// recording the cursor at each step. A container that consumed the element
+/// on failure would leave `afterFailure == 1` and then run off the end.
+private struct Retry: Decodable {
+    let before: Int
+    let failed: Bool
+    let afterFailure: Int
+    let text: String
+    let afterSuccess: Int
+}
+
+extension Retry {
+    fileprivate init(from decoder: any Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        self.before = container.currentIndex
+        // Element 0 is a string; asking for Int must fail without consuming it.
+        // swift-linter:disable:next try optional
+        // REASON: the error is the EXPECTED outcome and carries no information
+        // this probe needs — only whether the decode failed and where the
+        // cursor ended up. Through `any UnkeyedDecodingContainer` the throw is
+        // untyped, so `do throws(DecodingError)` cannot wrap it either.
+        self.failed = (try? container.decode(Int.self)) == nil
+        self.afterFailure = container.currentIndex
+        self.text = try container.decode(String.self)
+        self.afterSuccess = container.currentIndex
+    }
+}
+
+/// The same probe for a failed nested KEYED container request.
+private struct Nested: Decodable {
+    let afterFailure: Int
+    let value: Int
+    let afterSuccess: Int
+}
+
+extension Nested {
+    fileprivate init(from decoder: any Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        // swift-linter:disable:next try optional
+        // REASON: as in `Retry` — the failure is the point of the probe.
+        _ = try? container.nestedContainer(keyedBy: Year.self)
+        self.afterFailure = container.currentIndex
+        self.value = try container.decode(Int.self)
+        self.afterSuccess = container.currentIndex
+    }
+}
+
+/// The same probe for a failed nested UNKEYED container request.
+private struct Deep: Decodable {
+    let afterFailure: Int
+    let value: Int
+    let afterSuccess: Int
+}
+
+extension Deep {
+    fileprivate init(from decoder: any Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        // swift-linter:disable:next try optional
+        // REASON: as in `Retry` — the failure is the point of the probe.
+        _ = try? container.nestedUnkeyedContainer()
+        self.afterFailure = container.currentIndex
+        self.value = try container.decode(Int.self)
+        self.afterSuccess = container.currentIndex
+    }
+}
+
 /// Mirrors the `{"library": ["automatic"]}` / `{"executable": null}`
 /// discriminated union that `Product.Kind` decodes, where the `null` arm is
 /// distinguished by key PRESENCE rather than by value.
@@ -482,6 +548,34 @@ extension JSON.Decoder {
             }
 
             @Test
+            func `a failed decode does not consume the array element`() throws {
+                // One element. If the failure consumed it, the following
+                // String decode would run off the end instead of succeeding.
+                let value = try JSON.parse(#"["text"]"#).decode(Retry.self)
+                #expect(value.before == 0)
+                #expect(value.failed == true)
+                #expect(value.afterFailure == 0)
+                #expect(value.text == "text")
+                #expect(value.afterSuccess == 1)
+            }
+
+            @Test
+            func `a failed nested keyed container does not consume the element`() throws {
+                let value = try JSON.parse("[7]").decode(Nested.self)
+                #expect(value.afterFailure == 0)
+                #expect(value.value == 7)
+                #expect(value.afterSuccess == 1)
+            }
+
+            @Test
+            func `a failed nested unkeyed container does not consume the element`() throws {
+                let value = try JSON.parse("[7]").decode(Deep.self)
+                #expect(value.afterFailure == 0)
+                #expect(value.value == 7)
+                #expect(value.afterSuccess == 1)
+            }
+
+            @Test
             func `duplicate object keys resolve to the first occurrence`() throws {
                 // Matches `RFC_8259.Object`'s own subscript, which returns the
                 // first member with a given name.
@@ -566,6 +660,46 @@ extension JSON.Decoder {
                 #expect(try JSON.parse("3").decode(Double.self) == 3.0)
                 #expect(try JSON.parse("-2.25").decode(Float.self) == -2.25)
                 #expect(try JSON.parse("0.5").decode(Float.self) == 0.5)
+            }
+
+            @Test
+            func `a finite value too large for Float is refused`() throws {
+                // RFC 8259 has no infinity literal, so a finite JSON number
+                // must never decode as infinity.
+                #expect(throws: DecodingError.self) {
+                    try JSON.parse("1e300").decode(Float.self)
+                }
+            }
+
+            @Test
+            func `a finite negative value too large in magnitude for Float is refused`() throws {
+                #expect(throws: DecodingError.self) {
+                    try JSON.parse("-1e300").decode(Float.self)
+                }
+            }
+
+            @Test
+            func `the largest finite Float decodes`() throws {
+                let value = try JSON.parse("3.4028234663852886e38").decode(Float.self)
+                #expect(value.isFinite)
+                #expect(value == Float.greatestFiniteMagnitude)
+            }
+
+            @Test
+            func `finite rounding that stays finite is admitted`() throws {
+                // Not exactly representable in Float; rounds and stays finite.
+                let rounded = try JSON.parse("0.1").decode(Float.self)
+                #expect(rounded.isFinite)
+                #expect(rounded == Float(0.1))
+                // The same magnitude that overflows Float is fine as Double.
+                #expect(try JSON.parse("1e300").decode(Double.self) == 1e300)
+            }
+
+            @Test
+            func `underflow to zero remains ordinary rounding`() throws {
+                let value = try JSON.parse("1e-300").decode(Float.self)
+                #expect(value.isFinite)
+                #expect(value == 0)
             }
 
             @Test
