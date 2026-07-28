@@ -364,17 +364,17 @@ package func _lexNumber(
         }
     }
 
-    let span = bytes.span
-    // Build [Byte] for Number.Original; UInt8 mirror for stdlib's
-    // Double(_:String) / Int64.init(_:String) at the numStr stdlib edge.
-    let byteArray: [Byte] = .init(unsafeUninitializedCapacity: span.count) { dst, initialized in
-        for i in 0..<span.count {
-            dst[i] = span[i]
-        }
-        initialized = span.count
-    }
-    let original = RFC_8259.Number.Original(byteArray)
-    let numStr = String(decoding: byteArray.lazy.map(\.underlying), as: UTF8.self)
+    // `Number.Original` consumes the span directly and vends the decimal text,
+    // so no intermediate `[Byte]` is needed. The span is passed inline rather
+    // than bound: a `Span` borrowed from `bytes` is `~Escapable`, and hoisting
+    // it into a `let` that a stdlib `unsafeUninitializedCapacity` closure then
+    // captures is what Swift 6.4 rejects as
+    // `lifetime-dependent variable 'span' escapes its scope`.
+    //
+    // Taking the span initializer also skips a heap allocation per Number for
+    // the ≤ 23-byte inline case, which is virtually every JSON number.
+    let original = RFC_8259.Number.Original(bytes.span)
+    let numStr = original.string
 
     if isFloat {
         guard let value = Double(numStr), value.isFinite else {

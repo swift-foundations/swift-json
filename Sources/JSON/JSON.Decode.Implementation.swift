@@ -709,16 +709,15 @@ extension JSON.Decode.Implementation {
             }
             return RFC_8259.Number(value, original: original)
         } else {
-            // Stdlib boundary: String.init(unsafeUninitializedCapacity:)
-            // takes UnsafeMutableBufferPointer<UInt8>. Read Byte's
-            // underlying UInt8 at each slot — the only legitimate use of
-            // `.underlying` per W2 byte-cascade discipline (stdlib edge).
-            let numStr = String(unsafeUninitializedCapacity: span.count) { dst in
-                for i in 0..<span.count {
-                    dst[i] = span[i].underlying
-                }
-                return span.count
-            }
+            // `original` already holds exactly these bytes and vends the
+            // decimal text, so the string comes from it rather than from a
+            // second pass over the span.
+            //
+            // Not `String(unsafeUninitializedCapacity:)`: `span` borrows
+            // `bytes`, so it is `~Escapable` and cannot cross into that
+            // initializer's closure. Swift 6.4 diagnoses the capture as
+            // `lifetime-dependent variable 'span' escapes its scope`.
+            let numStr = original.string
             if let value = Int64(numStr) {
                 return RFC_8259.Number(value, original: original)
             } else if let value = UInt64(numStr) {
