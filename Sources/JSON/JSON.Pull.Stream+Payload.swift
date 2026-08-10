@@ -131,7 +131,7 @@ package func _lexString(
             scanner.advance()
             if isASCII {
                 let count = scratch.count
-                let result = scratch.withUnsafeBufferPointer { src -> String in
+                return scratch.withUnsafeBufferPointer { src -> String in
                     String(unsafeUninitializedCapacity: count) { dst in
                         if count > 0 {
                             dst.baseAddress!.update(from: src.baseAddress!, count: count)
@@ -139,9 +139,9 @@ package func _lexString(
                         return count
                     }
                 }
-                return result
             }
             return String(decoding: scratch, as: UTF8.self)
+
         case .reverseSlant:
             scanner.advance()
             let escapeBytes = try _lexEscape(scanner: &scanner)
@@ -149,11 +149,13 @@ package func _lexString(
                 if b > 0x7F { isASCII = false }
                 scratch.append(b)
             }
+
         case .nul...ASCII.Code.us:  // 0x00...0x1F (per ASCII.Code Control range)
             throw .invalidString(
                 at: _position(at: scanner.position, scanner: scanner),
                 reason: .controlCharacter(code)
             )
+
         default:
             // Printable 7-bit ASCII content (0x20...0x7F minus the cases above).
             scratch.append(code.underlying)
@@ -189,6 +191,7 @@ package func _lexEscape(
     case .r: return [.ascii.cr]
     case .t: return [.ascii.htab]
     case .u: return try _lexUnicodeEscape(scanner: &scanner)
+
     default:
         throw .invalidString(
             at: _position(at: scanner.position, scanner: scanner),

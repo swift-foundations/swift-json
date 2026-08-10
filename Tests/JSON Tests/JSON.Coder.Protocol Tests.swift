@@ -39,6 +39,7 @@ extension JSON.Coder {
                 switch error {
                 case .left:
                     break
+
                 case .right:
                     Issue.record("Parse error should be Either.left (decode side), got .right")
                 }

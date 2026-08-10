@@ -233,7 +233,8 @@ extension JSON.Serializable {
                     parserError = .unknown
                     return nil
                 }
-            } ?? nil
+            }
+            .flatMap { $0 }
         if let value = fastResult { return value }
         if let err = parserError { throw err }
         // Slow path: arbitrary Collection<Byte>.
@@ -352,6 +353,7 @@ extension Bool: JSON.Serializable {
         switch token {
         case .`true`: return true
         case .`false`: return false
+
         default:
             throw .typeMismatch(expected: "bool", got: token.description)
         }
@@ -487,8 +489,10 @@ extension Swift.Array: JSON.Serializable where Element: JSON.Serializable {
             switch next {
             case .arrayEnd:
                 return result
+
             case .comma:
                 result.append(try Element.deserialize(events: &events))
+
             default:
                 throw .invalidSyntax(message: "Expected ',' or ']', got \(next.description)", location: events.position().location)
             }
@@ -540,6 +544,7 @@ extension Dictionary: JSON.Serializable where Key == String, Value: JSON.Seriali
             switch next {
             case .objectEnd:
                 return result
+
             case .comma:
                 guard let keyToken = try events.next() else {
                     throw .invalidSyntax(message: "Unexpected end of input after ','", location: events.position().location)
@@ -550,6 +555,7 @@ extension Dictionary: JSON.Serializable where Key == String, Value: JSON.Seriali
                 let key = try events.currentString()
                 try events.expectColon()
                 result[key] = try Value.deserialize(events: &events)
+
             default:
                 throw .invalidSyntax(message: "Expected ',' or '}', got \(next.description)", location: events.position().location)
             }

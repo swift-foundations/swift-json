@@ -22,6 +22,8 @@ extension JSON.Decoder {
         /// The array being read.
         internal let array: RFC_8259.Array
 
+        // swiftlint:disable no_any_protocol_existential - `codingPath` is declared `[any CodingKey]` by `UnkeyedDecodingContainer`; the storage and the initializer that seeds it must spell the stdlib's element type (stdlib; rule-exemptions protocol-requirement shape)
+
         /// The path of coding keys taken to reach this container.
         internal let codingPath: [any CodingKey]
 
@@ -34,6 +36,8 @@ extension JSON.Decoder {
             self.codingPath = codingPath
             self.currentIndex = array.startIndex
         }
+
+        // swiftlint:enable no_any_protocol_existential
     }
 }
 
@@ -185,6 +189,7 @@ extension JSON.Decoder.Unkeyed: UnkeyedDecodingContainer {
         return container
     }
 
+    // swiftlint:disable no_any_protocol_existential - exact `UnkeyedDecodingContainer` requirement signature; the existential return type is the stdlib's, and the metatype below names the container the requirement returns (stdlib; rule-exemptions protocol-requirement shape)
     internal mutating func nestedUnkeyedContainer()
         throws(DecodingError) -> any UnkeyedDecodingContainer
     {
@@ -193,8 +198,11 @@ extension JSON.Decoder.Unkeyed: UnkeyedDecodingContainer {
         advance()
         return container
     }
+    // swiftlint:enable no_any_protocol_existential
 
+    // swiftlint:disable:next no_any_protocol_existential - exact `Swift.Decoder` requirement signature (stdlib; rule-exemptions protocol-requirement shape)
     internal mutating func superDecoder() throws(DecodingError) -> any Swift.Decoder {
+        // swiftlint:disable:next no_any_protocol_existential - stdlib `Swift.Decoder` existential metatype names the container the requirement returns (stdlib; rule-exemptions protocol-requirement shape)
         let decoder = try peek((any Swift.Decoder).self)
         advance()
         return decoder

@@ -96,8 +96,7 @@ extension JSON.Decode.Implementation {
         maxDepth: Int
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
         var parser = JSON.Decode.Implementation(bytes, maxDepth: maxDepth)
-        let value = try parser.parse()
-        return value
+        return try parser.parse()
     }
 
     /// Parses the input and returns a JSON value.
@@ -242,9 +241,11 @@ extension JSON.Decode.Implementation {
             case .rightBracket:
                 scanner.advance()
                 return .array(RFC_8259.Array(elements))
+
             case .comma:
                 scanner.advance()
                 elements.append(try parseValue())
+
             default:
                 throw .unexpectedToken(
                     at: currentPosition(),
@@ -291,9 +292,11 @@ extension JSON.Decode.Implementation {
             case .rightBrace:
                 scanner.advance()
                 return .object(RFC_8259.Object(members))
+
             case .comma:
                 scanner.advance()
                 members.append(try parseMember())
+
             default:
                 throw .unexpectedToken(
                     at: currentPosition(),
@@ -373,6 +376,7 @@ extension JSON.Decode.Implementation {
             switch byte {
             case 0x20, 0x09, 0x0A, 0x0D:
                 scanner.advance()
+
             default:
                 return
             }
@@ -464,7 +468,7 @@ extension JSON.Decode.Implementation {
                 scanner.advance()
                 if isASCII {
                     let count = stringScratch.count
-                    let result = stringScratch.withUnsafeBufferPointer { src -> String in
+                    return stringScratch.withUnsafeBufferPointer { src -> String in
                         String(unsafeUninitializedCapacity: count) { dst in
                             if count > 0 {
                                 dst.baseAddress!.update(from: src.baseAddress!, count: count)
@@ -472,7 +476,6 @@ extension JSON.Decode.Implementation {
                             return count
                         }
                     }
-                    return result
                 }
                 return String(decoding: stringScratch, as: UTF8.self)
 
@@ -522,6 +525,7 @@ extension JSON.Decode.Implementation {
         case .r: return [.ascii.cr]  // \r
         case .t: return [.ascii.htab]  // \t
         case .u: return try lexUnicodeEscape()  // \uXXXX
+
         default:
             throw .invalidString(at: currentPosition(), reason: .invalidEscape(code))
         }

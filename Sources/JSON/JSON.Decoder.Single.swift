@@ -23,6 +23,7 @@ extension JSON.Decoder {
 // MARK: - SingleValueDecodingContainer conformance
 
 extension JSON.Decoder.Single: SingleValueDecodingContainer {
+    // swiftlint:disable:next no_any_protocol_existential - `codingPath` is declared `[any CodingKey]` by the stdlib container protocols (stdlib; rule-exemptions protocol-requirement shape)
     internal var codingPath: [any CodingKey] { decoder.codingPath }
 
     internal func decodeNil() -> Bool { decoder.value.isNull }
