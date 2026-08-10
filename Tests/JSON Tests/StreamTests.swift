@@ -87,6 +87,7 @@ struct Test {
                 if let id = Int(json.id) {
                     successes.append(id)
                 }
+
             case .failure:
                 failures += 1
             }

@@ -60,7 +60,8 @@ extension JSON.Decode {
                     parserError = nil
                     return nil
                 }
-            } ?? nil
+            }
+            .flatMap { $0 }
         if let value = fastResult { return value }
         if let err = parserError { throw err }
         let array = Swift.Array(bytes)

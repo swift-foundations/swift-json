@@ -143,47 +143,56 @@ extension JSON.Encode.Encoder {
                 buffer.append(contentsOf: Self.escapeQuote)
                 unsafe cursor += 1
                 unsafe mark = cursor
+
             case 0x5C:  // \
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeBackslash)
                 unsafe cursor += 1
                 unsafe mark = cursor
+
             case 0x2F where escapeSlashes:  // /
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeSlash)
                 unsafe cursor += 1
                 unsafe mark = cursor
+
             case 0x08:  // backspace
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeBackspace)
                 unsafe cursor += 1
                 unsafe mark = cursor
+
             case 0x0C:  // formfeed
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeFormfeed)
                 unsafe cursor += 1
                 unsafe mark = cursor
+
             case 0x0A:  // newline
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeNewline)
                 unsafe cursor += 1
                 unsafe mark = cursor
+
             case 0x0D:  // carriage return
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeCarriageReturn)
                 unsafe cursor += 1
                 unsafe mark = cursor
+
             case 0x09:  // tab
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeTab)
                 unsafe cursor += 1
                 unsafe mark = cursor
+
             case 0x00...0x1F:  // other control chars → \uXXXX
                 unsafe _appendSafe(from: mark, to: cursor, into: &buffer)
                 buffer.append(contentsOf: Self.escapeUnicodePrefix)
                 unsafe encodeHex(UInt16(cursor.pointee), into: &buffer)
                 unsafe cursor += 1
                 unsafe mark = cursor
+
             default:
                 unsafe cursor += 1  // accumulate
             }
@@ -338,6 +347,7 @@ extension JSON.Encode.Encoder {
             case 6: buffer.append(contentsOf: Self.indent6)
             case 7: buffer.append(contentsOf: Self.indent7)
             case 8: buffer.append(contentsOf: Self.indent8)
+
             default:
                 // Deep nesting: fall through to loop
                 break

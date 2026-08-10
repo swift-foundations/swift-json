@@ -20,6 +20,8 @@ extension JSON.Decoder {
         /// Member names in insertion order, de-duplicated first-wins.
         internal let names: [String]
 
+        // swiftlint:disable no_any_protocol_existential - `codingPath` is declared `[any CodingKey]` by `KeyedDecodingContainerProtocol`; the storage and the initializer that seeds it must spell the stdlib's element type (stdlib; rule-exemptions protocol-requirement shape)
+
         /// The path of coding keys taken to reach this container.
         internal let codingPath: [any CodingKey]
 
@@ -37,6 +39,8 @@ extension JSON.Decoder {
             self.names = names
             self.codingPath = codingPath
         }
+
+        // swiftlint:enable no_any_protocol_existential
     }
 }
 
@@ -148,12 +152,15 @@ extension JSON.Decoder.Keyed: KeyedDecodingContainerProtocol {
         try decoder(for: key).container(keyedBy: type)
     }
 
+    // swiftlint:disable no_any_protocol_existential - exact `KeyedDecodingContainerProtocol` requirement signature; the existential return type is the stdlib's (stdlib; rule-exemptions protocol-requirement shape)
     internal func nestedUnkeyedContainer(
         forKey key: Key
     ) throws(DecodingError) -> any UnkeyedDecodingContainer {
         try decoder(for: key).unkeyedContainer()
     }
+    // swiftlint:enable no_any_protocol_existential
 
+    // swiftlint:disable:next no_any_protocol_existential - exact `Swift.Decoder` requirement signature (stdlib; rule-exemptions protocol-requirement shape)
     internal func superDecoder() throws(DecodingError) -> any Swift.Decoder {
         let key = JSON.Decoder.Key.super
         guard let found = index[key.stringValue] else {
@@ -169,6 +176,7 @@ extension JSON.Decoder.Keyed: KeyedDecodingContainerProtocol {
         return JSON.Decoder(value: found, codingPath: codingPath + [key])
     }
 
+    // swiftlint:disable:next no_any_protocol_existential - exact `Swift.Decoder` requirement signature (stdlib; rule-exemptions protocol-requirement shape)
     internal func superDecoder(forKey key: Key) throws(DecodingError) -> any Swift.Decoder {
         try decoder(for: key)
     }

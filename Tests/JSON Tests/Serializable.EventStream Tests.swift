@@ -257,11 +257,12 @@ extension `Serializable EventStream Tests`.FooEventGrain {
             switch key {
             case "name":
                 name = try String.deserialize(events: &events)
+
             default:
                 try events.skipValue()
             }
         }
-        guard let name = name else {
+        guard let name else {
             throw .missingKey("name")
         }
         return `Serializable EventStream Tests`.FooEventGrain(name: name)

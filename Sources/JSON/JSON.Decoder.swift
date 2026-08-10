@@ -46,6 +46,8 @@ extension JSON {
         /// The JSON value this decoder is positioned at.
         internal let value: RFC_8259.Value
 
+        // swiftlint:disable no_any_protocol_existential - `codingPath` is declared `[any CodingKey]` by `Swift.Decoder`; the storage and the initializer that seeds it must spell the stdlib's element type (stdlib; rule-exemptions protocol-requirement shape)
+
         /// The path of coding keys taken to reach this point.
         internal let codingPath: [any CodingKey]
 
@@ -54,6 +56,8 @@ extension JSON {
             self.value = value
             self.codingPath = codingPath
         }
+
+        // swiftlint:enable no_any_protocol_existential
     }
 }
 
@@ -74,13 +78,16 @@ extension JSON.Decoder: Swift.Decoder {
         )
     }
 
+    // swiftlint:disable:next no_any_protocol_existential - exact `UnkeyedDecodingContainer` requirement signature (stdlib; rule-exemptions protocol-requirement shape)
     internal func unkeyedContainer() throws(DecodingError) -> any UnkeyedDecodingContainer {
         guard case .array(let array) = value else {
+            // swiftlint:disable:next no_any_protocol_existential - stdlib `UnkeyedDecodingContainer` existential metatype names the container the requirement returns (stdlib; rule-exemptions protocol-requirement shape)
             throw mismatch((any UnkeyedDecodingContainer).self)
         }
         return JSON.Decoder.Unkeyed(array: array, codingPath: codingPath)
     }
 
+    // swiftlint:disable:next no_any_protocol_existential - exact `SingleValueDecodingContainer` requirement signature (stdlib; rule-exemptions protocol-requirement shape)
     internal func singleValueContainer() throws(DecodingError) -> any SingleValueDecodingContainer {
         JSON.Decoder.Single(decoder: self)
     }

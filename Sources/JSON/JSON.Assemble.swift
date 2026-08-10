@@ -72,20 +72,27 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
         switch token {
         case .null:
             return .null
+
         case .`true`:
             return .bool(true)
+
         case .`false`:
             return .bool(false)
+
         case .string:
             let value = try events.currentString()
             return .string(value)
+
         case .number:
             let number = try events.currentNumber()
             return .number(number)
+
         case .objectStart:
             return try buildObject(events: &events)
+
         case .arrayStart:
             return try buildArray(events: &events)
+
         case .objectEnd, .arrayEnd, .colon, .comma, .unknown:
             throw .unexpectedToken(
                 at: events.position(at: events.position),
@@ -128,6 +135,7 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
             switch next {
             case .objectEnd:
                 return .object(RFC_8259.Object(members))
+
             case .comma:
                 guard let keyToken = try events.next() else {
                     throw .unexpectedEndOfInput(at: events.position(at: events.position), expected: .objectKey)
@@ -146,6 +154,7 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
                 }
                 let value = try buildValue(forToken: valueToken, events: &events)
                 members.append((key: key, value: value))
+
             default:
                 throw .unexpectedToken(
                     at: events.position(at: events.position),
@@ -177,12 +186,14 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
             switch next {
             case .arrayEnd:
                 return .array(RFC_8259.Array(elements))
+
             case .comma:
                 guard let valueToken = try events.next() else {
                     throw .unexpectedEndOfInput(at: events.position(at: events.position), expected: .value)
                 }
                 let value = try buildValue(forToken: valueToken, events: &events)
                 elements.append(value)
+
             default:
                 throw .unexpectedToken(
                     at: events.position(at: events.position),

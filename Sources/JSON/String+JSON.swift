@@ -27,7 +27,7 @@ extension String {
     /// - Parameter json: The JSON value.
     @inlinable
     public init?(_ json: JSON?) {
-        guard let json = json else { return nil }
+        guard let json else { return nil }
         guard case .string(let value) = json.raw else { return nil }
         self = value
     }
