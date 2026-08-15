@@ -12,11 +12,6 @@ extension JSON.Decoder {
     internal struct Single {
         /// The decoder positioned at the value being read.
         internal let decoder: JSON.Decoder
-
-        /// Creates a container reading `decoder`'s value.
-        internal init(decoder: JSON.Decoder) {
-            self.decoder = decoder
-        }
     }
 }
 

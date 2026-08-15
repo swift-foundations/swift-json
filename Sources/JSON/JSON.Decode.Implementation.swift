@@ -310,7 +310,9 @@ extension JSON.Decode.Implementation {
     /// Parses a single object member (key: value).
     @inlinable
     @_lifetime(self: copy self)
-    package mutating func parseMember() throws(RFC_8259.Error) -> (key: String, value: RFC_8259.Value) {
+    package mutating func parseMember() throws(RFC_8259.Error) -> (
+        key: String, value: RFC_8259.Value
+    ) {
         skipWhitespace()
         // Type-up: lift to ASCII.Code at the peek boundary.
         guard let firstCode: ASCII.Code = scanner.peek() else {

@@ -51,12 +51,6 @@ extension JSON {
         /// The path of coding keys taken to reach this point.
         internal let codingPath: [any CodingKey]
 
-        /// Creates a decoder positioned at `value`.
-        internal init(value: RFC_8259.Value, codingPath: [any CodingKey]) {
-            self.value = value
-            self.codingPath = codingPath
-        }
-
         // swiftlint:enable no_any_protocol_existential
     }
 }

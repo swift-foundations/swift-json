@@ -278,7 +278,13 @@ extension JSON {
         let options = JSON.Encode.Options(prettyPrint: pretty, sortKeys: sortKeys)
         var bytes: [UInt8] = []
         var encoder = JSON.Encode.Encoder(options: options)
-        try! encoder.encode(raw, into: &bytes)
+        do throws(JSON.Encode.Error) {
+            try encoder.encode(raw, into: &bytes)
+        } catch {
+            preconditionFailure(
+                "JSON encoding exceeded maximum depth despite non-throwing contract: \(error)"
+            )
+        }
         return String(decoding: bytes, as: UTF8.self)
     }
 
@@ -293,11 +299,18 @@ extension JSON {
     ///   - sortKeys: Whether to sort object keys alphabetically.
     /// - Returns: The UTF-8 encoded JSON bytes.
     @inlinable
-    public func serialize(pretty: Bool = false, sortKeys: Bool = false, as: [UInt8].Type) -> [UInt8] {
+    public func serialize(pretty: Bool = false, sortKeys: Bool = false, as: [UInt8].Type) -> [UInt8]
+    {
         let options = JSON.Encode.Options(prettyPrint: pretty, sortKeys: sortKeys)
         var bytes: [UInt8] = []
         var encoder = JSON.Encode.Encoder(options: options)
-        try! encoder.encode(raw, into: &bytes)
+        do throws(JSON.Encode.Error) {
+            try encoder.encode(raw, into: &bytes)
+        } catch {
+            preconditionFailure(
+                "JSON encoding exceeded maximum depth despite non-throwing contract: \(error)"
+            )
+        }
         return bytes
     }
 }

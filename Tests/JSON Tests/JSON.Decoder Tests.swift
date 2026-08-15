@@ -346,8 +346,10 @@ extension JSON.Decoder {
 
             @Test
             func `decodeIfPresent distinguishes absent from null`() throws {
-                let absent = try JSON.parse(#"{"text":"a","flag":true,"signed":1,"unsigned":1,"fraction":1.0}"#)
-                    .decode(Primitives.self)
+                let absent = try JSON.parse(
+                    #"{"text":"a","flag":true,"signed":1,"unsigned":1,"fraction":1.0}"#
+                )
+                .decode(Primitives.self)
                 #expect(absent.absent == nil)
                 #expect(absent.present == nil)
             }

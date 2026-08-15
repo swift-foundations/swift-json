@@ -320,7 +320,8 @@ extension String: JSON.Serializable {
     }
 
     @inlinable
-    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> String {
+    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> String
+    {
         guard let token = try events.next() else {
             throw .typeMismatch(expected: "string", got: "end of input")
         }
@@ -407,7 +408,8 @@ extension Int64: JSON.Serializable {
     }
 
     @inlinable
-    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> Int64 {
+    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> Int64
+    {
         guard let token = try events.next() else {
             throw .typeMismatch(expected: "int64", got: "end of input")
         }
@@ -437,7 +439,8 @@ extension Double: JSON.Serializable {
     }
 
     @inlinable
-    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> Double {
+    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> Double
+    {
         guard let token = try events.next() else {
             throw .typeMismatch(expected: "double", got: "end of input")
         }
@@ -469,7 +472,9 @@ extension Swift.Array: JSON.Serializable where Element: JSON.Serializable {
     }
 
     @inlinable
-    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> [Element] {
+    public static func deserialize(
+        events: inout JSON.Span.EventStream
+    ) throws(JSON.Error) -> [Element] {
         try events.expectArrayStart()
         var result: [Element] = []
         // Empty-array detection: peek for ']' without consuming a
@@ -484,7 +489,10 @@ extension Swift.Array: JSON.Serializable where Element: JSON.Serializable {
 
         while true {
             guard let next = try events.next() else {
-                throw .invalidSyntax(message: "Unexpected end of input in array", location: events.position().location)
+                throw .invalidSyntax(
+                    message: "Unexpected end of input in array",
+                    location: events.position().location
+                )
             }
             switch next {
             case .arrayEnd:
@@ -494,7 +502,10 @@ extension Swift.Array: JSON.Serializable where Element: JSON.Serializable {
                 result.append(try Element.deserialize(events: &events))
 
             default:
-                throw .invalidSyntax(message: "Expected ',' or ']', got \(next.description)", location: events.position().location)
+                throw .invalidSyntax(
+                    message: "Expected ',' or ']', got \(next.description)",
+                    location: events.position().location
+                )
             }
         }
     }
@@ -519,7 +530,9 @@ extension Dictionary: JSON.Serializable where Key == String, Value: JSON.Seriali
     }
 
     @inlinable
-    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> [String: Value] {
+    public static func deserialize(
+        events: inout JSON.Span.EventStream
+    ) throws(JSON.Error) -> [String: Value] {
         try events.expectObjectStart()
         var result: [String: Value] = [:]
         if events.peekStructural() == UInt8(ascii: "}") {
@@ -528,10 +541,16 @@ extension Dictionary: JSON.Serializable where Key == String, Value: JSON.Seriali
         }
         // First member: key (string) : value
         guard let firstKeyToken = try events.next() else {
-            throw .invalidSyntax(message: "Unexpected end of input in object", location: events.position().location)
+            throw .invalidSyntax(
+                message: "Unexpected end of input in object",
+                location: events.position().location
+            )
         }
         guard firstKeyToken == .string else {
-            throw .invalidSyntax(message: "Expected object key (string), got \(firstKeyToken.description)", location: events.position().location)
+            throw .invalidSyntax(
+                message: "Expected object key (string), got \(firstKeyToken.description)",
+                location: events.position().location
+            )
         }
         let firstKey = try events.currentString()
         try events.expectColon()
@@ -539,7 +558,10 @@ extension Dictionary: JSON.Serializable where Key == String, Value: JSON.Seriali
 
         while true {
             guard let next = try events.next() else {
-                throw .invalidSyntax(message: "Unexpected end of input in object", location: events.position().location)
+                throw .invalidSyntax(
+                    message: "Unexpected end of input in object",
+                    location: events.position().location
+                )
             }
             switch next {
             case .objectEnd:
@@ -547,17 +569,26 @@ extension Dictionary: JSON.Serializable where Key == String, Value: JSON.Seriali
 
             case .comma:
                 guard let keyToken = try events.next() else {
-                    throw .invalidSyntax(message: "Unexpected end of input after ','", location: events.position().location)
+                    throw .invalidSyntax(
+                        message: "Unexpected end of input after ','",
+                        location: events.position().location
+                    )
                 }
                 guard keyToken == .string else {
-                    throw .invalidSyntax(message: "Expected object key (string), got \(keyToken.description)", location: events.position().location)
+                    throw .invalidSyntax(
+                        message: "Expected object key (string), got \(keyToken.description)",
+                        location: events.position().location
+                    )
                 }
                 let key = try events.currentString()
                 try events.expectColon()
                 result[key] = try Value.deserialize(events: &events)
 
             default:
-                throw .invalidSyntax(message: "Expected ',' or '}', got \(next.description)", location: events.position().location)
+                throw .invalidSyntax(
+                    message: "Expected ',' or '}', got \(next.description)",
+                    location: events.position().location
+                )
             }
         }
     }
@@ -577,13 +608,18 @@ extension Optional: JSON.Serializable where Wrapped: JSON.Serializable {
     }
 
     @inlinable
-    public static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> Wrapped? {
+    public static func deserialize(
+        events: inout JSON.Span.EventStream
+    ) throws(JSON.Error) -> Wrapped? {
         // Peek at the structural byte to detect null without consuming.
         // 'n' is the first byte of `null`; any other byte routes to
         // Wrapped.deserialize(events:).
         if events.peekStructural() == UInt8(ascii: "n") {
             guard let token = try events.next() else {
-                throw .invalidSyntax(message: "Unexpected end of input", location: events.position().location)
+                throw .invalidSyntax(
+                    message: "Unexpected end of input",
+                    location: events.position().location
+                )
             }
             guard token == .null else {
                 throw .typeMismatch(expected: "value or null", got: token.description)

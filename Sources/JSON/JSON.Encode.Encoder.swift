@@ -37,11 +37,15 @@ extension JSON.Encode.Encoder {
     // Keywords
     @usableFromInline static let keywordNull: [UInt8] = [.ascii.n, .ascii.u, .ascii.l, .ascii.l]
     @usableFromInline static let keywordTrue: [UInt8] = [.ascii.t, .ascii.r, .ascii.u, .ascii.e]
-    @usableFromInline static let keywordFalse: [UInt8] = [.ascii.f, .ascii.a, .ascii.l, .ascii.s, .ascii.e]
+    @usableFromInline static let keywordFalse: [UInt8] = [
+        .ascii.f, .ascii.a, .ascii.l, .ascii.s, .ascii.e,
+    ]
 
     // Escape sequences (static to avoid allocating arrays in hot path)
     @usableFromInline static let escapeQuote: [UInt8] = [.ascii.reverseSlant, .ascii.quotationMark]
-    @usableFromInline static let escapeBackslash: [UInt8] = [.ascii.reverseSlant, .ascii.reverseSlant]
+    @usableFromInline static let escapeBackslash: [UInt8] = [
+        .ascii.reverseSlant, .ascii.reverseSlant,
+    ]
     @usableFromInline static let escapeSlash: [UInt8] = [.ascii.reverseSlant, .ascii.solidus]
     @usableFromInline static let escapeBackspace: [UInt8] = [.ascii.reverseSlant, .ascii.b]
     @usableFromInline static let escapeFormfeed: [UInt8] = [.ascii.reverseSlant, .ascii.f]
@@ -290,7 +294,9 @@ extension JSON.Encode.Encoder {
 
         if options.sortKeys {
             // Sort by UTF-8 bytes (lexicographic), not Unicode collation
-            for (key, value) in object.sorted(by: { $0.key.utf8.lexicographicallyPrecedes($1.key.utf8) }) {
+            for (key, value) in object.sorted(by: {
+                $0.key.utf8.lexicographicallyPrecedes($1.key.utf8)
+            }) {
                 if !first { buffer.append(.ascii.comma) }
                 first = false
                 if options.prettyPrint {
