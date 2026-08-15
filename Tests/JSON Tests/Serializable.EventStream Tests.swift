@@ -218,7 +218,9 @@ extension `Serializable EventStream Tests`.FooDefault {
         ["name": .string(value.name), "age": .number(value.age)]
     }
 
-    static func deserialize(_ json: JSON) throws(JSON.Error) -> `Serializable EventStream Tests`.FooDefault {
+    static func deserialize(
+        _ json: JSON
+    ) throws(JSON.Error) -> `Serializable EventStream Tests`.FooDefault {
         let name = String(json.name)
         guard !name.isEmpty else {
             throw .missingKey("name")
@@ -235,7 +237,9 @@ extension `Serializable EventStream Tests`.FooEventGrain {
         ["name": .string(value.name)]
     }
 
-    static func deserialize(_ json: JSON) throws(JSON.Error) -> `Serializable EventStream Tests`.FooEventGrain {
+    static func deserialize(
+        _ json: JSON
+    ) throws(JSON.Error) -> `Serializable EventStream Tests`.FooEventGrain {
         let name = String(json.name)
         guard !name.isEmpty else {
             throw .missingKey("name")
@@ -243,7 +247,9 @@ extension `Serializable EventStream Tests`.FooEventGrain {
         return `Serializable EventStream Tests`.FooEventGrain(name: name)
     }
 
-    static func deserialize(events: inout JSON.Span.EventStream) throws(JSON.Error) -> `Serializable EventStream Tests`.FooEventGrain {
+    static func deserialize(
+        events: inout JSON.Span.EventStream
+    ) throws(JSON.Error) -> `Serializable EventStream Tests`.FooEventGrain {
         try events.expectObjectStart()
         var name: String? = nil
         while let token = try events.next() {

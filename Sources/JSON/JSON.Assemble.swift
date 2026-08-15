@@ -108,7 +108,10 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
         var members: [(key: String, value: RFC_8259.Value)] = []
         guard let first = try events.next() else {
-            throw .unexpectedEndOfInput(at: events.position(at: events.position), expected: .objectEnd)
+            throw .unexpectedEndOfInput(
+                at: events.position(at: events.position),
+                expected: .objectEnd
+            )
         }
         if first == .objectEnd {
             return .object(RFC_8259.Object(members))
@@ -130,7 +133,10 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
 
         while true {
             guard let next = try events.next() else {
-                throw .unexpectedEndOfInput(at: events.position(at: events.position), expected: .objectEnd)
+                throw .unexpectedEndOfInput(
+                    at: events.position(at: events.position),
+                    expected: .objectEnd
+                )
             }
             switch next {
             case .objectEnd:
@@ -138,7 +144,10 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
 
             case .comma:
                 guard let keyToken = try events.next() else {
-                    throw .unexpectedEndOfInput(at: events.position(at: events.position), expected: .objectKey)
+                    throw .unexpectedEndOfInput(
+                        at: events.position(at: events.position),
+                        expected: .objectKey
+                    )
                 }
                 guard keyToken == .string else {
                     throw .unexpectedToken(
@@ -150,7 +159,10 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
                 let key = try events.currentString()
                 try expectColon(&events)
                 guard let valueToken = try events.next() else {
-                    throw .unexpectedEndOfInput(at: events.position(at: events.position), expected: .value)
+                    throw .unexpectedEndOfInput(
+                        at: events.position(at: events.position),
+                        expected: .value
+                    )
                 }
                 let value = try buildValue(forToken: valueToken, events: &events)
                 members.append((key: key, value: value))
@@ -171,7 +183,10 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
     ) throws(RFC_8259.Error) -> RFC_8259.Value {
         var elements: [RFC_8259.Value] = []
         guard let first = try events.next() else {
-            throw .unexpectedEndOfInput(at: events.position(at: events.position), expected: .arrayEnd)
+            throw .unexpectedEndOfInput(
+                at: events.position(at: events.position),
+                expected: .arrayEnd
+            )
         }
         if first == .arrayEnd {
             return .array(RFC_8259.Array(elements))
@@ -181,7 +196,10 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
 
         while true {
             guard let next = try events.next() else {
-                throw .unexpectedEndOfInput(at: events.position(at: events.position), expected: .arrayEnd)
+                throw .unexpectedEndOfInput(
+                    at: events.position(at: events.position),
+                    expected: .arrayEnd
+                )
             }
             switch next {
             case .arrayEnd:
@@ -189,7 +207,10 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
 
             case .comma:
                 guard let valueToken = try events.next() else {
-                    throw .unexpectedEndOfInput(at: events.position(at: events.position), expected: .value)
+                    throw .unexpectedEndOfInput(
+                        at: events.position(at: events.position),
+                        expected: .value
+                    )
                 }
                 let value = try buildValue(forToken: valueToken, events: &events)
                 elements.append(value)

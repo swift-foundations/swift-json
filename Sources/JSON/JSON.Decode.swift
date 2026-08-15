@@ -65,7 +65,8 @@ extension JSON.Decode {
         if let value = fastResult { return value }
         if let err = parserError { throw err }
         let array = Swift.Array(bytes)
-        return try array.withUnsafeBufferPointer { (buffer: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) -> RFC_8259.Value in
+        return try array.withUnsafeBufferPointer {
+            (buffer: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) -> RFC_8259.Value in
             try Implementation.parse(buffer.span, maxDepth: maxDepth)
         }
     }

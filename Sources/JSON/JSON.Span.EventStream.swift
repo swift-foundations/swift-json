@@ -71,13 +71,17 @@ extension JSON.Span.EventStream {
     @inlinable
     @_lifetime(self: copy self)
     public mutating func currentString() throws(JSON.Error) -> String {
-        do throws(RFC_8259.Error) { return try inner.currentString() } catch { throw JSON.Error(error) }
+        do throws(RFC_8259.Error) { return try inner.currentString() } catch {
+            throw JSON.Error(error)
+        }
     }
 
     @inlinable
     @_lifetime(self: copy self)
     public mutating func currentNumber() throws(JSON.Error) -> RFC_8259.Number {
-        do throws(RFC_8259.Error) { return try inner.currentNumber() } catch { throw JSON.Error(error) }
+        do throws(RFC_8259.Error) { return try inner.currentNumber() } catch {
+            throw JSON.Error(error)
+        }
     }
 
     @inlinable
@@ -105,7 +109,10 @@ extension JSON.Span.EventStream {
     @_lifetime(self: copy self)
     public mutating func expectObjectStart() throws(JSON.Error) {
         guard let token = try next() else {
-            throw .invalidSyntax(message: "expected '{', got end of input", location: position().location)
+            throw .invalidSyntax(
+                message: "expected '{', got end of input",
+                location: position().location
+            )
         }
         guard token == .objectStart else {
             throw .typeMismatch(expected: "object", got: token.description)
@@ -116,7 +123,10 @@ extension JSON.Span.EventStream {
     @_lifetime(self: copy self)
     public mutating func expectArrayStart() throws(JSON.Error) {
         guard let token = try next() else {
-            throw .invalidSyntax(message: "expected '[', got end of input", location: position().location)
+            throw .invalidSyntax(
+                message: "expected '[', got end of input",
+                location: position().location
+            )
         }
         guard token == .arrayStart else {
             throw .typeMismatch(expected: "array", got: token.description)
@@ -127,10 +137,16 @@ extension JSON.Span.EventStream {
     @_lifetime(self: copy self)
     public mutating func expectColon() throws(JSON.Error) {
         guard let token = try next() else {
-            throw .invalidSyntax(message: "expected ':', got end of input", location: position().location)
+            throw .invalidSyntax(
+                message: "expected ':', got end of input",
+                location: position().location
+            )
         }
         guard token == .colon else {
-            throw .invalidSyntax(message: "expected ':', got \(token.description)", location: position().location)
+            throw .invalidSyntax(
+                message: "expected ':', got \(token.description)",
+                location: position().location
+            )
         }
     }
 }

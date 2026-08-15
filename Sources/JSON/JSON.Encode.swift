@@ -78,7 +78,13 @@ extension JSON.Encode {
     ) -> [UInt8] {
         var buffer: [UInt8] = []
         var encoder = Encoder(options: options)
-        try! encoder.encode(value, into: &buffer)
+        do throws(JSON.Encode.Error) {
+            try encoder.encode(value, into: &buffer)
+        } catch {
+            preconditionFailure(
+                "JSON encoding exceeded maximum depth despite non-throwing contract: \(error)"
+            )
+        }
         return buffer
     }
 
@@ -94,6 +100,12 @@ extension JSON.Encode {
         options: JSON.Encode.Options = JSON.Encode.Options()
     ) where Buffer.Element == UInt8 {
         var encoder = Encoder(options: options)
-        try! encoder.encode(value, into: &buffer)
+        do throws(JSON.Encode.Error) {
+            try encoder.encode(value, into: &buffer)
+        } catch {
+            preconditionFailure(
+                "JSON encoding exceeded maximum depth despite non-throwing contract: \(error)"
+            )
+        }
     }
 }

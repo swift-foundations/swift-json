@@ -28,7 +28,8 @@ extension JSON.Assemble {
         @Test
         func `Assemble.from short-circuits at position 0 and returns parsed value`() throws {
             let bytes: [Byte] = #"{"name":"alice","age":30,"tags":["x","y"]}"#.utf8.map(Byte.init)
-            try bytes.withUnsafeBufferPointer { (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
+            try bytes.withUnsafeBufferPointer {
+                (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
                 let span = buf.span
                 var stream = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(span)
                 let unforkedBefore: Bool = stream.isPristine
@@ -51,7 +52,8 @@ extension JSON.Assemble {
             // isPristine becomes false; the helper then routes
             // through the slow event-pull-and-rebuild path.
             let bytes: [Byte] = #"[1,2,3]"#.utf8.map(Byte.init)
-            try bytes.withUnsafeBufferPointer { (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
+            try bytes.withUnsafeBufferPointer {
+                (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
                 let span = buf.span
                 var stream = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(span)
                 let firstToken = try stream.next()
@@ -66,7 +68,8 @@ extension JSON.Assemble {
         @Test
         func `Assemble.from on null produces .null value`() throws {
             let bytes: [Byte] = "null".utf8.map(Byte.init)
-            try bytes.withUnsafeBufferPointer { (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
+            try bytes.withUnsafeBufferPointer {
+                (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
                 let span = buf.span
                 var stream = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(span)
                 let value = try Lexer.Pull.Assemble.from(&stream, strategy: JSON.Assemble.self)
@@ -80,7 +83,8 @@ extension JSON.Assemble {
             // equal the public `JSON.Decode.parse(_:)` output on the same bytes.
             let bytes: [Byte] = #"{"a":1,"b":[true,null,"s"]}"#.utf8.map(Byte.init)
             let direct = try JSON.Decode.parse(bytes)
-            try bytes.withUnsafeBufferPointer { (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
+            try bytes.withUnsafeBufferPointer {
+                (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
                 let span = buf.span
                 var stream = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(span)
                 let assembled = try Lexer.Pull.Assemble.from(&stream, strategy: JSON.Assemble.self)

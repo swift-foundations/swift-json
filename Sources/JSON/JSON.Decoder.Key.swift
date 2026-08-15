@@ -19,12 +19,6 @@ extension JSON.Decoder {
         /// The integer form, present for array indices and absent for
         /// object member names.
         internal let intValue: Int?
-
-        /// Creates a key carrying both forms.
-        internal init(stringValue: String, intValue: Int?) {
-            self.stringValue = stringValue
-            self.intValue = intValue
-        }
     }
 }
 
