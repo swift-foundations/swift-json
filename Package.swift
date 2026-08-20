@@ -1,15 +1,15 @@
-// swift-tools-version: 6.3.3
+// swift-tools-version: 6.4
 
 import PackageDescription
 
 let package = Package(
     name: "swift-json",
     platforms: [
-        .macOS("27"),
-        .iOS("27"),
-        .tvOS("27"),
-        .watchOS("27"),
-        .visionOS("27")
+        .macOS(.v27),
+        .iOS(.v27),
+        .tvOS(.v27),
+        .watchOS(.v27),
+        .visionOS(.v27),
     ],
     products: [
         .library(name: "JSON", targets: ["JSON"]),
@@ -20,8 +20,14 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/swift-ietf/swift-rfc-8259.git", branch: "main"),
-        .package(url: "https://github.com/swift-primitives/swift-parser-primitives.git", branch: "main"),
-        .package(url: "https://github.com/swift-primitives/swift-array-primitives.git", branch: "main"),
+        .package(
+            url: "https://github.com/swift-primitives/swift-parser-primitives.git",
+            branch: "main"
+        ),
+        .package(
+            url: "https://github.com/swift-primitives/swift-array-primitives.git",
+            branch: "main"
+        ),
         // The Array<S>-over-column tower: the number-lexer scratch buffer is the inline⊕heap small
         // column `Array<Buffer<Storage<Memory.Allocator<Memory.Small<24>>>.Contiguous<Byte>>.Linear>`
         // (the SBO that stays inline up to 24 bytes and spills to heap beyond — the restored
@@ -29,18 +35,51 @@ let package = Package(
         // access, [MEM-SAFE-029]). Array_Primitives does NOT re-export the tower (exports-narrowing),
         // so each tower layer is an explicit dep + import. (swift-memory-small-primitives transitively
         // brings the heap + inline arms it composes.)
-        .package(url: "https://github.com/swift-primitives/swift-buffer-primitives.git", branch: "main"),
-        .package(url: "https://github.com/swift-primitives/swift-buffer-linear-primitives.git", branch: "main"),
-        .package(url: "https://github.com/swift-primitives/swift-storage-primitives.git", branch: "main"),
-        .package(url: "https://github.com/swift-primitives/swift-memory-allocation-primitives.git", branch: "main"),
-        .package(url: "https://github.com/swift-primitives/swift-memory-small-primitives.git", branch: "main"),
-        .package(url: "https://github.com/swift-primitives/swift-byte-primitives.git", branch: "main"),
-        .package(url: "https://github.com/swift-primitives/swift-index-primitives.git", branch: "main"),
-        .package(url: "https://github.com/swift-primitives/swift-ascii-primitives.git", branch: "main"),
-        .package(url: "https://github.com/swift-primitives/swift-ascii-parser-primitives.git", branch: "main"),
-        .package(url: "https://github.com/swift-primitives/swift-coder-primitives.git", branch: "main"),
-        .package(url: "https://github.com/swift-primitives/swift-either-primitives.git", branch: "main"),
-        .package(url: "https://github.com/swift-foundations/swift-async.git", branch: "main")
+        .package(
+            url: "https://github.com/swift-primitives/swift-buffer-primitives.git",
+            branch: "main"
+        ),
+        .package(
+            url: "https://github.com/swift-primitives/swift-buffer-linear-primitives.git",
+            branch: "main"
+        ),
+        .package(
+            url: "https://github.com/swift-primitives/swift-storage-primitives.git",
+            branch: "main"
+        ),
+        .package(
+            url: "https://github.com/swift-primitives/swift-memory-allocation-primitives.git",
+            branch: "main"
+        ),
+        .package(
+            url: "https://github.com/swift-primitives/swift-memory-small-primitives.git",
+            branch: "main"
+        ),
+        .package(
+            url: "https://github.com/swift-primitives/swift-byte-primitives.git",
+            branch: "main"
+        ),
+        .package(
+            url: "https://github.com/swift-primitives/swift-index-primitives.git",
+            branch: "main"
+        ),
+        .package(
+            url: "https://github.com/swift-primitives/swift-ascii-primitives.git",
+            branch: "main"
+        ),
+        .package(
+            url: "https://github.com/swift-primitives/swift-ascii-parser-primitives.git",
+            branch: "main"
+        ),
+        .package(
+            url: "https://github.com/swift-primitives/swift-coder-primitives.git",
+            branch: "main"
+        ),
+        .package(
+            url: "https://github.com/swift-primitives/swift-either-primitives.git",
+            branch: "main"
+        ),
+        .package(url: "https://github.com/swift-foundations/swift-async.git", branch: "main"),
     ],
     targets: [
         .target(
@@ -51,19 +90,34 @@ let package = Package(
                 .product(name: "Array Primitives", package: "swift-array-primitives"),
                 .product(name: "Array Small Primitive", package: "swift-array-primitives"),
                 .product(name: "Buffer Primitive", package: "swift-buffer-primitives"),
-                .product(name: "Buffer Linear Primitive", package: "swift-buffer-linear-primitives"),
-                .product(name: "Buffer Linear Primitives", package: "swift-buffer-linear-primitives"),
+                .product(
+                    name: "Buffer Linear Primitive",
+                    package: "swift-buffer-linear-primitives"
+                ),
+                .product(
+                    name: "Buffer Linear Primitives",
+                    package: "swift-buffer-linear-primitives"
+                ),
                 .product(name: "Storage Primitive", package: "swift-storage-primitives"),
-                .product(name: "Storage Contiguous Primitives", package: "swift-storage-primitives"),
-                .product(name: "Memory Allocator Primitive", package: "swift-memory-allocation-primitives"),
+                .product(
+                    name: "Storage Contiguous Primitives",
+                    package: "swift-storage-primitives"
+                ),
+                .product(
+                    name: "Memory Allocator Primitive",
+                    package: "swift-memory-allocation-primitives"
+                ),
                 .product(name: "Memory Small Primitives", package: "swift-memory-small-primitives"),
                 .product(name: "Byte Primitive", package: "swift-byte-primitives"),
                 .product(name: "Index Primitives", package: "swift-index-primitives"),
                 .product(name: "ASCII Primitives", package: "swift-ascii-primitives"),
-                .product(name: "ASCII Decimal Parser Primitives", package: "swift-ascii-parser-primitives"),
+                .product(
+                    name: "ASCII Decimal Parser Primitives",
+                    package: "swift-ascii-parser-primitives"
+                ),
                 .product(name: "Coder Primitives", package: "swift-coder-primitives"),
                 .product(name: "Either Primitives", package: "swift-either-primitives"),
-                .product(name: "Async", package: "swift-async")
+                .product(name: "Async", package: "swift-async"),
             ]
         ),
         .target(
@@ -76,7 +130,7 @@ let package = Package(
         .testTarget(
             name: "JSON Tests",
             dependencies: [
-                "JSON",
+                "JSON"
             ]
         ),
         .testTarget(
