@@ -24,14 +24,14 @@ public import Buffer_Linear_Primitives
 // `Buffer.Linear: Buffer.Protocol`) have to be visible to inlined clients ([MemberImportVisibility]).
 // This matches the existing `Array_Primitives` public import; the JSON public API surface
 // (`currentNumber()` → `RFC_8259.Number`) is unchanged.
-public import Buffer_Primitive
+import Buffer_Primitive
 public import Byte_Primitive
 public import Index_Primitives
 public import Memory_Allocator_Primitive
 public import Memory_Small_Primitives
 public import RFC_8259
 public import Storage_Contiguous_Primitives
-public import Storage_Primitive
+import Storage_Primitive
 
 /// The number-lexer scratch accumulator: the move-only **small column** (`Memory.Small<24>`) of the
 /// `Array<S>`-over-column tower — the inline⊕heap SBO that restores the original
@@ -134,7 +134,7 @@ package func _lexString(
                 return scratch.withUnsafeBufferPointer { src -> String in
                     String(unsafeUninitializedCapacity: count) { dst in
                         if count > 0 {
-                            dst.baseAddress!.update(from: src.baseAddress!, count: count)
+                            unsafe dst.baseAddress!.update(from: src.baseAddress!, count: count)
                         }
                         return count
                     }
