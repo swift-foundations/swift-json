@@ -473,7 +473,7 @@ extension JSON.Decode.Implementation {
                     return stringScratch.withUnsafeBufferPointer { src -> String in
                         String(unsafeUninitializedCapacity: count) { dst in
                             if count > 0 {
-                                dst.baseAddress!.update(from: src.baseAddress!, count: count)
+                                unsafe dst.baseAddress!.update(from: src.baseAddress!, count: count)
                             }
                             return count
                         }

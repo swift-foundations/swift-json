@@ -50,7 +50,7 @@ extension JSON.Decode {
         let fastResult: RFC_8259.Value? =
             bytes.withContiguousStorageIfAvailable {
                 (buffer: UnsafeBufferPointer<Byte>) -> RFC_8259.Value? in
-                let span = buffer.span
+                let span = unsafe buffer.span
                 do {
                     return try Implementation.parse(span, maxDepth: maxDepth)
                 } catch let error as RFC_8259.Error {
@@ -67,7 +67,7 @@ extension JSON.Decode {
         let array = Swift.Array(bytes)
         return try array.withUnsafeBufferPointer {
             (buffer: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) -> RFC_8259.Value in
-            try Implementation.parse(buffer.span, maxDepth: maxDepth)
+            try unsafe Implementation.parse(buffer.span, maxDepth: maxDepth)
         }
     }
 }
