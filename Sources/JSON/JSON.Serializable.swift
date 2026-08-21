@@ -222,7 +222,7 @@ extension JSON.Serializable {
         let fastResult: Self? =
             bytes.withContiguousStorageIfAvailable {
                 (buffer: UnsafeBufferPointer<Byte>) -> Self? in
-                let span = buffer.span
+                let span = unsafe buffer.span
                 var stream = JSON.Span.EventStream(span)
                 do {
                     return try Self.deserialize(events: &stream)
@@ -241,7 +241,7 @@ extension JSON.Serializable {
         let array = Swift.Array(bytes)
         var slowError: JSON.Error? = nil
         let result: Self? = array.withUnsafeBufferPointer { buffer -> Self? in
-            let span = buffer.span
+            let span = unsafe buffer.span
             var stream = JSON.Span.EventStream(span)
             do {
                 return try Self.deserialize(events: &stream)
@@ -448,7 +448,7 @@ extension Double: JSON.Serializable {
             throw .typeMismatch(expected: "double", got: token.description)
         }
         let number = try events.currentNumber()
-        return number.double ?? Double(number.int64 ?? 0)
+        return number.double
     }
 }
 
