@@ -21,8 +21,6 @@
 /// For memory-constrained environments parsing large documents, consider
 /// using a SAX-style parser or splitting input into smaller documents.
 
-public import Async
-
 // MARK: - NDJSON Streaming
 
 extension JSON.ND {
@@ -52,13 +50,11 @@ extension JSON.ND {
     @inlinable
     public static func stream<S: AsyncSequence & Sendable>(
         _ bytes: S
-    ) -> Async.Stream<Result<JSON, JSON.Error>>
+    ) -> AsyncStream<Result<JSON, JSON.Error>>
     where S.Element == UInt8 {
-        Async.Stream {
-            let state = State(bytes.makeAsyncIterator())
-            return Async.Stream<Result<JSON, JSON.Error>>.Iterator {
-                await state.next()
-            }
+        let state = State(bytes.makeAsyncIterator())
+        return AsyncStream {
+            await state.next()
         }
     }
 }
@@ -230,14 +226,12 @@ extension JSON.Parse {
     @inlinable
     public func stream<S: AsyncSequence & Sendable>(
         ndjson bytes: S
-    ) -> Async.Stream<Result<JSON, JSON.Error>>
+    ) -> AsyncStream<Result<JSON, JSON.Error>>
     where S.Element == UInt8 {
         // Delegate to the static stream function
-        Async.Stream {
-            let state = JSON.ND.State(bytes.makeAsyncIterator())
-            return Async.Stream<Result<JSON, JSON.Error>>.Iterator {
-                await state.next()
-            }
+        let state = JSON.ND.State(bytes.makeAsyncIterator())
+        return AsyncStream {
+            await state.next()
         }
     }
 
