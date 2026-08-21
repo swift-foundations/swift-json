@@ -79,6 +79,7 @@ let package = Package(
             url: "https://github.com/swift-primitives/swift-either-primitives.git",
             branch: "main"
         ),
+        .package(url: "https://github.com/swift-foundations/swift-async.git", branch: "main"),
     ],
     targets: [
         .target(
@@ -116,6 +117,7 @@ let package = Package(
                 ),
                 .product(name: "Coder Primitives", package: "swift-coder-primitives"),
                 .product(name: "Either Primitives", package: "swift-either-primitives"),
+                .product(name: "Async", package: "swift-async"),
             ]
         ),
         .target(
