@@ -1,53 +1,26 @@
-/// JSON.Decoder.Unkeyed.swift
-/// swift-json
-///
-/// The unkeyed decoding container over a JSON array.
-///
-/// The cursor advances only after a decode SUCCEEDS. A failed decode leaves
-/// the element unconsumed, so a caller that catches the error can retry the
-/// same position with a different type — the behaviour `Swift.Decodable`
-/// conformers rely on when they probe a heterogeneous array. Locating the
-/// element (``peek(_:)``) is therefore separated from consuming it
-/// (``advance()``), and every requirement below performs them in that order.
-///
-/// ``decodeNil()`` is the one deliberate asymmetry, and it is a probe by
-/// design: it consumes the element when it IS null and leaves the cursor
-/// alone when it is not.
-
 import RFC_8259
 
 extension JSON.Decoder {
-    /// An unkeyed decoding container reading elements of a JSON array.
+
     internal struct Unkeyed {
-        /// The array being read.
+
         internal let array: RFC_8259.Array
 
-        // swiftlint:disable no_any_protocol_existential - `codingPath` is declared `[any CodingKey]` by `UnkeyedDecodingContainer`; the storage and the initializer that seeds it must spell the stdlib's element type (stdlib; rule-exemptions protocol-requirement shape)
-
-        /// The path of coding keys taken to reach this container.
         internal let codingPath: [any CodingKey]
 
-        /// The position of the next element to read.
         internal var currentIndex: Int
 
-        /// Creates a container positioned at the array's first element.
         internal init(array: RFC_8259.Array, codingPath: [any CodingKey]) {
             self.array = array
             self.codingPath = codingPath
             self.currentIndex = array.startIndex
         }
 
-        // swiftlint:enable no_any_protocol_existential
     }
 }
 
-// MARK: - Locating and consuming
-
 extension JSON.Decoder.Unkeyed {
-    /// The decoder for the next element, WITHOUT consuming it.
-    ///
-    /// `type` names the value the caller asked for, so exhausting the
-    /// container reports which decode ran off the end.
+
     internal func peek<T>(_ type: T.Type) throws(DecodingError) -> JSON.Decoder {
         guard !isAtEnd else { throw exhausted(type) }
         return JSON.Decoder(
@@ -56,12 +29,10 @@ extension JSON.Decoder.Unkeyed {
         )
     }
 
-    /// Consumes the element that was just decoded successfully.
     internal mutating func advance() {
         currentIndex = array.index(after: currentIndex)
     }
 
-    /// The error for a read past the final element.
     internal func exhausted<T>(_ type: T.Type) -> DecodingError {
         .valueNotFound(
             type,
@@ -73,8 +44,6 @@ extension JSON.Decoder.Unkeyed {
         )
     }
 }
-
-// MARK: - UnkeyedDecodingContainer conformance
 
 extension JSON.Decoder.Unkeyed: UnkeyedDecodingContainer {
     internal var count: Int? { array.count }
@@ -189,7 +158,6 @@ extension JSON.Decoder.Unkeyed: UnkeyedDecodingContainer {
         return container
     }
 
-    // swiftlint:disable no_any_protocol_existential - exact `UnkeyedDecodingContainer` requirement signature; the existential return type is the stdlib's, and the metatype below names the container the requirement returns (stdlib; rule-exemptions protocol-requirement shape)
     internal mutating func nestedUnkeyedContainer()
         throws(DecodingError) -> any UnkeyedDecodingContainer
     {
@@ -198,11 +166,9 @@ extension JSON.Decoder.Unkeyed: UnkeyedDecodingContainer {
         advance()
         return container
     }
-    // swiftlint:enable no_any_protocol_existential
 
-    // swiftlint:disable:next no_any_protocol_existential - exact `Swift.Decoder` requirement signature (stdlib; rule-exemptions protocol-requirement shape)
     internal mutating func superDecoder() throws(DecodingError) -> any Swift.Decoder {
-        // swiftlint:disable:next no_any_protocol_existential - stdlib `Swift.Decoder` existential metatype names the container the requirement returns (stdlib; rule-exemptions protocol-requirement shape)
+
         let decoder = try peek((any Swift.Decoder).self)
         advance()
         return decoder

@@ -1,29 +1,9 @@
-/// Serializable.EventStream Tests.swift
-/// swift-json
-///
-/// Tests for `JSON.Serializable.deserialize(events:)` and
-/// `JSON.Serializable.from(eventDecodingJsonBytes:)` introduced by
-/// Phase A1 of the streaming-deserialize arc.
-///
-/// Coverage:
-/// - Foundational conformers (String, Int, Int64, Double, Bool,
-///   Optional, Array, Dictionary, JSON) round-trip correctly via the
-///   event-grain path.
-/// - The §4.3 default-fallback short-circuit is exercised — a
-///   non-overriding conformer's `deserialize(events:)` produces the
-///   same output as the existing tree path.
-/// - `from(eventDecodingJsonBytes:)` dispatches correctly on
-///   contiguous storage (`[Byte]`, `ContiguousArray<Byte>`,
-///   `ArraySlice<Byte>`).
-
 import Testing
 
 @testable import JSON
 
 @Suite
 struct `Serializable EventStream Tests` {
-
-    // MARK: - Foundational conformers via event-grain
 
     @Test
     func `String round-trips via from eventDecodingJsonBytes`() throws {
@@ -134,19 +114,10 @@ struct `Serializable EventStream Tests` {
         #expect(Int(result["number"]) == 42)
     }
 
-    // MARK: - §4.3 default-fallback non-regression (correctness)
-
-    // FooDefault inherits the protocol-extension default
-    // deserialize(events:) which goes through JSON.Assemble.from(_:).
-    // This validates the fallback path produces the same result as
-    // the existing tree-grain init(jsonBytes:).
-
     struct FooDefault: JSON.Serializable {
         let name: String
         let age: Int
 
-        // Deliberately does NOT override deserialize(events:) — uses
-        // the protocol-extension default.
     }
 
     @Test
@@ -160,12 +131,6 @@ struct `Serializable EventStream Tests` {
         #expect(viaTree.name == viaEvents.name)
         #expect(viaTree.age == viaEvents.age)
     }
-
-    // MARK: - Opt-in event-grain wedge
-
-    // FooEventGrain overrides deserialize(events:) and reads only the
-    // declared fields, skipping the rest. This is the wedge that closes
-    // the 37% gap.
 
     struct FooEventGrain: JSON.Serializable {
         let name: String
@@ -194,8 +159,6 @@ struct `Serializable EventStream Tests` {
         }
         #expect(key == "name")
     }
-
-    // MARK: - Entry point dispatch shapes
 
     @Test
     func `from eventDecodingJsonBytes works with contiguous ArraySlice`() throws {

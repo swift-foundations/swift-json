@@ -1,36 +1,21 @@
-/// JSON.Error.swift
-/// swift-json
-///
-/// User-friendly JSON errors
-
 import RFC_8259
 
 extension JSON {
-    /// An error that occurred during JSON parsing or deserialization.
+
     public enum Error: Swift.Error, Sendable, Hashable {
-        /// A type mismatch occurred during deserialization.
+
         case typeMismatch(expected: String, got: String)
 
-        /// A required key was missing from an object.
         case missingKey(String)
 
-        /// The JSON syntax is invalid.
-        ///
-        /// `location` carries the typed `Text.Location` (line + column)
-        /// from `swift-text-primitives`. Stays high-typed end-to-end —
-        /// no `Int` boundary conversions at the error-construction site.
         case invalidSyntax(message: String, location: Text.Location)
 
-        /// The input was empty or whitespace-only.
         case emptyInput
 
-        /// Nesting depth exceeded the limit.
         case depthExceeded(limit: Int)
 
-        /// An unknown error occurred.
         case unknown
 
-        /// Creates an error from an RFC 8259 error.
         @usableFromInline
         internal init(_ error: RFC_8259.Error) {
             switch error {
@@ -80,8 +65,6 @@ extension JSON {
         }
     }
 }
-
-// MARK: - CustomStringConvertible
 
 extension JSON.Error: CustomStringConvertible {
     public var description: String {

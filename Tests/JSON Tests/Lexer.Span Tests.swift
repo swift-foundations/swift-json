@@ -1,12 +1,3 @@
-/// Lexer.Span Tests.swift
-/// swift-rfc-8259
-///
-/// Tests for the wholesale parser introduced in Phase A1 of
-/// `parse-performance-architecture.md`. The internal parser lives at
-/// `RFC_8259.Decode.Implementation` (backed by `Lexer.Scanner` from
-/// swift-lexer-primitives); the public entry points (`JSON.Decode.parse`,
-/// `RFC_8259.parse`) dispatch to it for contiguous-bytes inputs.
-
 import Testing
 
 @testable import JSON
@@ -15,13 +6,11 @@ extension JSON.Decode {
     @Suite
     struct Test {
 
-        // MARK: - Structural tokens via Span
-
         @Test
         func `Span parses structural tokens via [Byte] path`() throws {
             let bytes: [Byte] = "[{},[]]".utf8.map(Byte.init)
             let value = try JSON.Decode.parse(bytes)
-            // Outer array has one object and one array.
+
             #expect(value.array?.count == 2)
             #expect(value[0]?.object?.count == 0)
             #expect(value[1]?.array?.count == 0)
@@ -34,8 +23,6 @@ extension JSON.Decode {
             #expect(value[0]?.object?.count == 0)
             #expect(value[1]?.array?.count == 0)
         }
-
-        // MARK: - Literals
 
         @Test
         func `Span parses null`() throws {
@@ -54,8 +41,6 @@ extension JSON.Decode {
             let value = try JSON.Decode.parse("false")
             #expect(value.bool == false)
         }
-
-        // MARK: - Numbers
 
         @Test
         func `Span parses integer`() throws {
@@ -127,8 +112,6 @@ extension JSON.Decode {
             }
         }
 
-        // MARK: - Strings
-
         @Test
         func `Span parses simple string`() throws {
             let value = try JSON.Decode.parse("\"hello\"")
@@ -167,7 +150,7 @@ extension JSON.Decode {
 
         @Test
         func `Span parses surrogate pair via unicode escapes`() throws {
-            // U+1F600 (😀) = 😀
+
             let value = try JSON.Decode.parse("\"\\uD83D\\uDE00\"")
             #expect(value.string == "😀")
         }
@@ -220,7 +203,7 @@ extension JSON.Decode {
 
         @Test
         func `Span rejects high surrogate without low`() throws {
-            // \uD83D is a high surrogate, but no low surrogate follows.
+
             #expect(throws: RFC_8259.Error.self) {
                 try JSON.Decode.parse("\"\\uD83D\"")
             }
@@ -239,8 +222,6 @@ extension JSON.Decode {
                 try JSON.Decode.parse("\"hello\nworld\"")
             }
         }
-
-        // MARK: - Arrays
 
         @Test
         func `Span parses empty array`() throws {
@@ -279,8 +260,6 @@ extension JSON.Decode {
                 try JSON.Decode.parse("[1, 2")
             }
         }
-
-        // MARK: - Objects
 
         @Test
         func `Span parses empty object`() throws {
@@ -324,8 +303,6 @@ extension JSON.Decode {
             }
         }
 
-        // MARK: - Nested structures
-
         @Test
         func `Span parses nested structure`() throws {
             let json = """
@@ -343,8 +320,6 @@ extension JSON.Decode {
             #expect(value["users"]?[1]?["active"]?.bool == false)
         }
 
-        // MARK: - Depth limit
-
         @Test
         func `Span respects depth limit`() throws {
             let json = String(repeating: "[", count: 10) + "1" + String(repeating: "]", count: 10)
@@ -354,8 +329,6 @@ extension JSON.Decode {
                 try JSON.Decode.parse(json, maxDepth: 5)
             }
         }
-
-        // MARK: - Whitespace and trailing content
 
         @Test
         func `Span handles all whitespace types between tokens`() throws {
@@ -393,18 +366,15 @@ extension JSON.Decode {
             }
         }
 
-        // MARK: - Lazy position tracking
-
         @Test
         func `Span lazy position computes line/column on error`() throws {
-            // Input has the error on line 3, column 1 (the unterminated string).
-            let json = "{\n  \"good\": 1,\n  \"bad\""  // missing colon + value + brace
+
+            let json = "{\n  \"good\": 1,\n  \"bad\""
             do throws(RFC_8259.Error) {
                 _ = try JSON.Decode.parse(json)
                 Issue.record("Expected parse error")
             } catch {
-                // We don't care which exact error fires; just that the
-                // position is at a sensible line.
+
                 let offset: Int
                 switch error {
                 case .unexpectedToken(let pos, _, _): offset = Int(bitPattern: pos.offset)
@@ -415,7 +385,7 @@ extension JSON.Decode {
                 case .depthExceeded(let pos, _): offset = Int(bitPattern: pos.offset)
                 case .trailingContent(let pos): offset = Int(bitPattern: pos.offset)
                 }
-                // Offset should be > 0 and within input bounds.
+
                 #expect(offset > 0)
                 #expect(offset <= json.utf8.count)
             }
@@ -423,14 +393,7 @@ extension JSON.Decode {
 
         @Test
         func `Span lazy position reports line 2 after a newline`() throws {
-            // After the migration to Lexer.Scanner, line:column tracking is
-            // O(1) via Text.Location.Tracker (updated incrementally by the
-            // parser's skipWhitespace). The original cache-invariant
-            // mechanism (cachedPosition / cachedPositionOffset / per-error
-            // rescan) is gone. This test verifies the equivalent observable
-            // behaviour: a syntax error AFTER a newline reports line 2.
-            //
-            // Input: `{\n  "bad"` — unterminated key string on line 2.
+
             let json = "{\n  \"bad"
             do throws(RFC_8259.Error) {
                 _ = try JSON.Decode.parse(json)

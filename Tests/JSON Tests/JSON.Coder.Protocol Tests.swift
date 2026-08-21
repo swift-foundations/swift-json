@@ -1,13 +1,3 @@
-/// JSON.Coder.Protocol Tests.swift
-/// swift-json
-///
-/// Tests for JSON.Coder's Coder.Protocol-surface API.
-///
-/// Exercises the refined `parse(_:)` and `serialize(_:into:)` methods
-/// directly (inherited via [FAM-006] from Parser.Protocol +
-/// Serializer.Protocol) with the unified
-/// `Either<RFC_8259.Error, JSON.Encode.Error>` failure type.
-
 import Either_Primitives
 import Testing
 
@@ -66,8 +56,6 @@ extension JSON.Coder {
             var outputBuffer: [UInt8] = []
             try coder.serialize(parsed, into: &outputBuffer)
 
-            // serialize emits a `[UInt8]` Buffer; the parser consumes a
-            // `Span<Byte>`. Bridge the encoder output to `[Byte]` for re-parse.
             let outputBytes: [Byte] = outputBuffer.map(Byte.init)
             var outputSpan = outputBytes.span
             let reparsed = try coder.parse(&outputSpan)

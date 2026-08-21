@@ -1,19 +1,7 @@
-/// JSON.Decoder+Value.swift
-/// swift-json
-///
-/// Value extraction and error construction for ``JSON/Decoder``.
-///
-/// Every primitive a container can be asked for is unwrapped here, so the
-/// three containers hold no conversion logic of their own — they locate a
-/// child value, build a child decoder, and delegate. That keeps the
-/// numeric-conversion rules in one place, stated once and tested once.
-
 import RFC_8259
 
-// MARK: - Error construction
-
 extension JSON.Decoder {
-    /// A human-readable name for the JSON value's case.
+
     internal var kind: String {
         switch value {
         case .null: "null"
@@ -25,11 +13,6 @@ extension JSON.Decoder {
         }
     }
 
-    /// The error for a value of the wrong shape at this position.
-    ///
-    /// JSON `null` reports `valueNotFound` rather than `typeMismatch`,
-    /// matching the distinction `Swift.DecodingError` draws between a
-    /// present-but-wrong value and an explicitly absent one.
     internal func mismatch<T>(_ type: T.Type) -> DecodingError {
         let context = DecodingError.Context(
             codingPath: codingPath,
@@ -41,7 +24,6 @@ extension JSON.Decoder {
         return .typeMismatch(type, context)
     }
 
-    /// The error for a value of the right shape that cannot be represented.
     internal func corrupt(_ description: String) -> DecodingError {
         .dataCorrupted(
             DecodingError.Context(
@@ -51,8 +33,6 @@ extension JSON.Decoder {
         )
     }
 }
-
-// MARK: - Primitive extraction
 
 extension JSON.Decoder {
     internal func string() throws(DecodingError) -> String {
@@ -66,21 +46,8 @@ extension JSON.Decoder {
     }
 }
 
-// MARK: - Numeric extraction
-
 extension JSON.Decoder {
-    /// Unwraps an integer, refusing every lossy conversion.
-    ///
-    /// ``RFC_8259/Number`` keeps the arm the parser chose, so the rules can
-    /// be stated exactly:
-    ///
-    /// - `.integer` / `.unsigned` convert through `init?(exactly:)`, which
-    ///   rejects both out-of-range magnitudes and negative values requested
-    ///   as an unsigned type.
-    /// - `.float` is admitted only when the value is finite AND has no
-    ///   fractional part — matching ``RFC_8259/Number/int``, so `1e2`
-    ///   decodes as `100` while `1.5` is refused rather than truncated.
-    /// - Strings and booleans are never coerced; they fail as a mismatch.
+
     internal func integer<T: FixedWidthInteger>(
         _ type: T.Type
     ) throws(DecodingError) -> T {
@@ -106,19 +73,6 @@ extension JSON.Decoder {
         }
     }
 
-    /// Unwraps a floating-point value, refusing overflow to infinity.
-    ///
-    /// Rounding is admitted: `Double` cannot hold every `Int64` past 2^53,
-    /// and `Float` cannot hold every `Double`. Losing low-order bits is a
-    /// property of the REQUESTED type under IEEE 754 round-to-nearest, not
-    /// a distortion of the JSON value, so a finite result is returned as-is.
-    ///
-    /// OVERFLOW is not rounding. RFC 8259 has no infinity literal, so every
-    /// JSON number is finite; a conversion that yields ±infinity has
-    /// replaced a finite quantity with one that is not a number at all
-    /// (`1e300` requested as `Float`). That is refused rather than returned.
-    /// Underflow to zero remains admitted — it is ordinary rounding toward
-    /// the nearest representable value.
     internal func floating<T: BinaryFloatingPoint>(
         _ type: T.Type
     ) throws(DecodingError) -> T {
@@ -133,7 +87,6 @@ extension JSON.Decoder {
         return converted
     }
 
-    /// The error for a number outside the requested type's range.
     internal func overflow<T>(
         _ number: RFC_8259.Number,
         _ type: T.Type
@@ -142,27 +95,12 @@ extension JSON.Decoder {
     }
 }
 
-// MARK: - Decodable extraction
-
 extension JSON.Decoder {
-    /// Drives `type`'s own `init(from:)` against this decoder.
-    ///
-    /// A custom `init(from:)` may throw anything at all, but the public
-    /// entry point promises `DecodingError`. A foreign error is therefore
-    /// wrapped as `dataCorrupted` with the original preserved in
-    /// `underlyingError` and the coding path recorded — nothing is erased.
-    /// Wrapping happens at the innermost decoder, where the coding path is
-    /// most precise; outer levels see a `DecodingError` and pass it through
-    /// untouched, so an error is never wrapped twice.
+
     internal func decoded<T: Swift.Decodable>(
         _ type: T.Type
     ) throws(DecodingError) -> T {
-        // swift-linter:disable:next do throws for typed catch
-        // REASON: [IMPL-075] preserves a KNOWN concrete error type through the
-        // catch. Here there is none to preserve — `Decodable.init(from:)` is
-        // declared `throws` with no typed form, and normalising that open set
-        // into `DecodingError` is this function's entire purpose. A
-        // `do throws(DecodingError)` cannot compile around it.
+
         do {
             return try T(from: self)
         } catch let error as DecodingError {

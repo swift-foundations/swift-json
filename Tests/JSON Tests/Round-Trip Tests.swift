@@ -1,8 +1,3 @@
-/// RoundTripTests.swift
-/// swift-rfc-8259
-///
-/// Tests for round-trip encode/decode consistency
-
 import Testing
 
 @testable import JSON
@@ -81,7 +76,7 @@ extension JSON.Coder {
 
         @Test
         func `Round-trip preserves number representation`() throws {
-            // Scientific notation should be preserved
+
             let json = "1.5e10"
             let value = try JSON.Decode.parse(json)
             let encoded = JSON.Encode.encode(value)

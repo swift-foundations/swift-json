@@ -1,8 +1,3 @@
-/// RFC8259ConformanceTests.swift
-/// swift-rfc-8259
-///
-/// Tests for RFC 8259 spec compliance and edge cases
-
 import Testing
 
 @testable import JSON
@@ -10,8 +5,6 @@ import Testing
 extension RFC_8259 {
     @Suite
     struct `RFC 8259 Conformance Tests` {
-
-        // MARK: - Error Cases: Numbers
 
         @Test
         func `Reject leading zeros`() throws {
@@ -76,8 +69,6 @@ extension RFC_8259 {
             }
         }
 
-        // MARK: - Error Cases: Strings
-
         @Test
         func `Reject unterminated string`() throws {
             #expect(throws: RFC_8259.Error.self) {
@@ -126,8 +117,6 @@ extension RFC_8259 {
                 try JSON.Decode.parse("\"hello\tworld\"")
             }
         }
-
-        // MARK: - Error Cases: Structure
 
         @Test
         func `Reject trailing content`() throws {
@@ -199,8 +188,6 @@ extension RFC_8259 {
             }
         }
 
-        // MARK: - Error Cases: Invalid Tokens
-
         @Test
         func `Reject undefined`() throws {
             #expect(throws: RFC_8259.Error.self) {
@@ -243,24 +230,18 @@ extension RFC_8259 {
             }
         }
 
-        // MARK: - Depth Limiting
-
         @Test
         func `Respect depth limit`() throws {
-            // Nested 10 levels deep
+
             let json = String(repeating: "[", count: 10) + "1" + String(repeating: "]", count: 10)
 
-            // Should succeed with default depth
             let value = try JSON.Decode.parse(json)
             #expect(value.array != nil)
 
-            // Should fail with lower limit
             #expect(throws: RFC_8259.Error.self) {
                 try JSON.Decode.parse(json, maxDepth: 5)
             }
         }
-
-        // MARK: - Unicode
 
         @Test
         func `Parse UTF-8 string`() throws {
@@ -276,12 +257,10 @@ extension RFC_8259 {
 
         @Test
         func `Parse surrogate pair via unicode escapes`() throws {
-            // U+1F600 (😀) = \uD83D\uDE00 in surrogate pairs
+
             let value = try JSON.Decode.parse("\"\\uD83D\\uDE00\"")
             #expect(value.string == "😀")
         }
-
-        // MARK: - Object Key Handling
 
         @Test
         func `Object preserves insertion order`() throws {
@@ -295,11 +274,9 @@ extension RFC_8259 {
         func `Object handles duplicate keys (last wins)`() throws {
             let json = "{\"key\":1,\"key\":2}"
             let value = try JSON.Decode.parse(json)
-            // Behavior: both are stored; first match wins on lookup
+
             #expect(value["key"]?.number?.int64 == 1)
         }
-
-        // MARK: - Large Numbers
 
         @Test
         func `Parse large integer`() throws {

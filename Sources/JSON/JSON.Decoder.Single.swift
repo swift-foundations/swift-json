@@ -1,24 +1,13 @@
-/// JSON.Decoder.Single.swift
-/// swift-json
-///
-/// The single-value decoding container.
-///
-/// A thin forwarder: the decoder it wraps is already positioned at exactly
-/// the value this container reads, so every requirement delegates without
-/// locating anything first.
-
 extension JSON.Decoder {
-    /// A single-value decoding container over one JSON value.
+
     internal struct Single {
-        /// The decoder positioned at the value being read.
+
         internal let decoder: JSON.Decoder
     }
 }
 
-// MARK: - SingleValueDecodingContainer conformance
-
 extension JSON.Decoder.Single: SingleValueDecodingContainer {
-    // swiftlint:disable:next no_any_protocol_existential - `codingPath` is declared `[any CodingKey]` by the stdlib container protocols (stdlib; rule-exemptions protocol-requirement shape)
+
     internal var codingPath: [any CodingKey] { decoder.codingPath }
 
     internal func decodeNil() -> Bool { decoder.value.isNull }

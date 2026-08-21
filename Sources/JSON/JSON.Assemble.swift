@@ -1,35 +1,10 @@
-/// JSON.Assemble.swift
-/// swift-json
-///
-/// JSON assemble strategy for the L1 ``Lexer/Pull/Assemble`` cohort.
-///
-/// Implements ``Lexer/Pull/Assemble/Strategy`` for RFC 8259 JSON.
-/// Supplies:
-///
-/// - `Tokens` = ``RFC_8259/Pull/Tokens`` (the JSON token witness at L2).
-/// - `Value` = ``RFC_8259/Value`` (the JSON value tree at L2).
-/// - `consume(bytes:limit:)` — the wholesale fast-path. After the
-///   Decode-relocation commit, delegates to the moved
-///   ``RFC_8259/Decode/Implementation/parse(_:maxDepth:)``-equivalent
-///   at L3. Until then, falls back to event-walking via `build`.
-/// - `build(events:)` — the slow-path. Walks the event stream and
-///   builds ``RFC_8259/Value`` event-by-event.
-///
-/// Relocated from swift-rfc-8259's `RFC_8259.Pull.Assemble` (Arc 1.5):
-/// the Strategy conformance is implementation, not spec, so it lives
-/// at L3. The L1 ``Lexer/Pull/Assemble/from(_:strategy:)`` utility
-/// remains at L1; this type is an internal strategy passed to it.
-
 public import RFC_8259
 
 extension JSON {
-    /// JSON assemble strategy. Internal — surfaced only as an
-    /// implementation detail to compose with ``Lexer/Pull/Assemble``.
+
     @usableFromInline
     internal enum Assemble {}
 }
-
-// MARK: - Strategy conformance
 
 extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
     @usableFromInline
@@ -38,10 +13,6 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
     @usableFromInline
     internal typealias Value = RFC_8259.Value
 
-    /// Wholesale fast-path — delegates to ``RFC_8259/Decode/Implementation/parse(_:maxDepth:)``.
-    ///
-    /// Per A0 §9.3, this short-circuit is the BINDING constraint that
-    /// makes the §4.3 default-fallback non-regressing.
     @inlinable
     package static func consume(
         bytes: Swift.Span<Byte>,
@@ -50,7 +21,6 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
         try JSON.Decode.Implementation.parse(bytes, maxDepth: limit)
     }
 
-    /// Slow-path — drives the event stream to rebuild the tree.
     @inlinable
     package static func build(
         events: inout Lexer.Pull.Stream<RFC_8259.Pull.Tokens>
@@ -242,15 +212,8 @@ extension JSON.Assemble: Lexer.Pull.Assemble.Strategy {
     }
 }
 
-// MARK: - JSON.Error-adapter helper
-
 extension JSON.Assemble {
-    /// Assembles a `JSON` value by delegating to
-    /// ``Lexer/Pull/Assemble/from(_:strategy:)`` with this strategy and
-    /// adapting `RFC_8259.Error` → `JSON.Error`.
-    ///
-    /// Preserves the call-site contract at
-    /// `JSON.Serializable.deserialize(events:)`.
+
     @inlinable
     package static func from(_ events: inout JSON.Span.EventStream) throws(JSON.Error) -> JSON {
         do throws(RFC_8259.Error) {

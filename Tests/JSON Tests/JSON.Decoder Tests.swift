@@ -1,21 +1,6 @@
-/// JSON.Decoder Tests.swift
-/// swift-json
-///
-/// Tests for the Foundation-free `Swift.Decoder` over a parsed JSON value.
-///
-/// The `Integration` suite carries a fixture mirroring the structural needs
-/// of `swift-spm-standard`'s `Package.Manifest.Evaluation` — nested
-/// discriminator objects, single-element record arrays, a nested
-/// source-control location, a requirement union, products, targets,
-/// platforms, optional fields, and unknown fields that must be ignored.
-/// That package is NOT a dependency here; the fixture reproduces its wire
-/// shape only.
-
 import Testing
 
 @testable import JSON
-
-// MARK: - Fixtures
 
 private struct Primitives: Decodable {
     let text: String
@@ -51,8 +36,6 @@ private enum Shape: Decodable {
     case square(side: Double)
 }
 
-/// Validates in `init(from:)` and reports the failure against its own key,
-/// exercising `DecodingError.dataCorruptedError(forKey:in:)`.
 private struct Age: Decodable {
     let years: Int
 }
@@ -76,7 +59,6 @@ extension Age {
     }
 }
 
-/// Reports the cursor state of an unkeyed container as it is drained.
 private struct Cursor: Decodable {
     let count: Int?
     let indices: [Int]
@@ -97,9 +79,6 @@ extension Cursor {
     }
 }
 
-/// Probes one array element with the WRONG type, then the right one,
-/// recording the cursor at each step. A container that consumed the element
-/// on failure would leave `afterFailure == 1` and then run off the end.
 private struct Retry: Decodable {
     let before: Int
     let failed: Bool
@@ -112,12 +91,7 @@ extension Retry {
     fileprivate init(from decoder: any Decoder) throws {
         var container = try decoder.unkeyedContainer()
         self.before = container.currentIndex
-        // Element 0 is a string; asking for Int must fail without consuming it.
-        // swift-linter:disable:next try optional
-        // REASON: the error is the EXPECTED outcome and carries no information
-        // this probe needs — only whether the decode failed and where the
-        // cursor ended up. Through `any UnkeyedDecodingContainer` the throw is
-        // untyped, so `do throws(DecodingError)` cannot wrap it either.
+
         self.failed = (try? container.decode(Int.self)) == nil
         self.afterFailure = container.currentIndex
         self.text = try container.decode(String.self)
@@ -125,7 +99,6 @@ extension Retry {
     }
 }
 
-/// The same probe for a failed nested KEYED container request.
 private struct Nested: Decodable {
     let afterFailure: Int
     let value: Int
@@ -135,8 +108,7 @@ private struct Nested: Decodable {
 extension Nested {
     fileprivate init(from decoder: any Decoder) throws {
         var container = try decoder.unkeyedContainer()
-        // swift-linter:disable:next try optional
-        // REASON: as in `Retry` — the failure is the point of the probe.
+
         _ = try? container.nestedContainer(keyedBy: Year.self)
         self.afterFailure = container.currentIndex
         self.value = try container.decode(Int.self)
@@ -144,7 +116,6 @@ extension Nested {
     }
 }
 
-/// The same probe for a failed nested UNKEYED container request.
 private struct Deep: Decodable {
     let afterFailure: Int
     let value: Int
@@ -154,8 +125,7 @@ private struct Deep: Decodable {
 extension Deep {
     fileprivate init(from decoder: any Decoder) throws {
         var container = try decoder.unkeyedContainer()
-        // swift-linter:disable:next try optional
-        // REASON: as in `Retry` — the failure is the point of the probe.
+
         _ = try? container.nestedUnkeyedContainer()
         self.afterFailure = container.currentIndex
         self.value = try container.decode(Int.self)
@@ -163,9 +133,6 @@ extension Deep {
     }
 }
 
-/// Mirrors the `{"library": ["automatic"]}` / `{"executable": null}`
-/// discriminated union that `Product.Kind` decodes, where the `null` arm is
-/// distinguished by key PRESENCE rather than by value.
 private struct Kind: Decodable {
     let library: String?
     let executable: Bool
@@ -188,8 +155,6 @@ extension Kind {
         self.executable = container.contains(.executable)
     }
 }
-
-// MARK: - Manifest-shaped fixture
 
 private struct Remote: Decodable {
     let urlString: String
@@ -251,10 +216,8 @@ private struct Manifest: Decodable {
     let platforms: [Platform]?
 }
 
-// MARK: - Helpers
-
 extension JSON.Decoder {
-    /// The coding path recorded on any `DecodingError`, as plain strings.
+
     fileprivate static func path(of error: DecodingError) -> [String] {
         let context: DecodingError.Context
         switch error {
@@ -268,13 +231,9 @@ extension JSON.Decoder {
     }
 }
 
-// MARK: - Suite
-
 extension JSON.Decoder {
     @Suite
     struct Test {
-
-        // MARK: Unit
 
         @Suite
         struct Unit {
@@ -399,9 +358,7 @@ extension JSON.Decoder {
 
             @Test
             func `contains reports true for a key whose value is null`() throws {
-                // The shape `Product.Kind` relies on: the `executable` arm is
-                // spelled `{"executable": null}` and is identified by key
-                // PRESENCE. Treating null as absence would misdecode it.
+
                 let value = try JSON.parse(#"{"executable":null}"#).decode(Kind.self)
                 #expect(value.executable == true)
                 #expect(value.library == nil)
@@ -412,8 +369,6 @@ extension JSON.Decoder {
                 #expect(library.executable == false)
             }
         }
-
-        // MARK: Edge Case
 
         @Suite
         struct `Edge Case` {
@@ -551,8 +506,7 @@ extension JSON.Decoder {
 
             @Test
             func `a failed decode does not consume the array element`() throws {
-                // One element. If the failure consumed it, the following
-                // String decode would run off the end instead of succeeding.
+
                 let value = try JSON.parse(#"["text"]"#).decode(Retry.self)
                 #expect(value.before == 0)
                 #expect(value.failed == true)
@@ -579,15 +533,12 @@ extension JSON.Decoder {
 
             @Test
             func `duplicate object keys resolve to the first occurrence`() throws {
-                // Matches `RFC_8259.Object`'s own subscript, which returns the
-                // first member with a given name.
+
                 let json = try JSON.parse(#"{"first":1,"second":2,"first":99}"#)
                 let value = try json.decode(Pair.self)
                 #expect(value.first == 1)
             }
         }
-
-        // MARK: Numeric boundaries
 
         @Suite
         struct Numeric {
@@ -651,8 +602,7 @@ extension JSON.Decoder {
 
             @Test
             func `an integral value written with an exponent decodes as an integer`() throws {
-                // `1e2` carries no fractional part, so admitting it is not
-                // truncation — it matches `RFC_8259.Number.int`.
+
                 #expect(try JSON.parse("1e2").decode(Int.self) == 100)
             }
 
@@ -666,8 +616,7 @@ extension JSON.Decoder {
 
             @Test
             func `a finite value too large for Float is refused`() throws {
-                // RFC 8259 has no infinity literal, so a finite JSON number
-                // must never decode as infinity.
+
                 #expect(throws: DecodingError.self) {
                     try JSON.parse("1e300").decode(Float.self)
                 }
@@ -689,11 +638,11 @@ extension JSON.Decoder {
 
             @Test
             func `finite rounding that stays finite is admitted`() throws {
-                // Not exactly representable in Float; rounds and stays finite.
+
                 let rounded = try JSON.parse("0.1").decode(Float.self)
                 #expect(rounded.isFinite)
                 #expect(rounded == Float(0.1))
-                // The same magnitude that overflows Float is fine as Double.
+
                 #expect(try JSON.parse("1e300").decode(Double.self) == 1e300)
             }
 
@@ -727,8 +676,6 @@ extension JSON.Decoder {
                 }
             }
         }
-
-        // MARK: Integration
 
         @Suite
         struct Integration {
@@ -811,9 +758,6 @@ extension JSON.Decoder {
                 #expect(record.location.local == nil)
             }
 
-            /// A manifest carrying both dependency discriminators, a nested
-            /// location union, a requirement union, single-element record
-            /// arrays, optional fields, and unknown fields to be ignored.
             fileprivate static let manifest = """
                 {
                   "name": "swift-package-manager",
@@ -874,9 +818,6 @@ extension JSON.Decoder {
     }
 }
 
-// MARK: - Fixtures referenced above
-
-/// Three elements read from a two-element array, to run off the end.
 private struct Pair3: Decodable {
     let a: Int
     let b: Int
@@ -892,7 +833,6 @@ extension Pair3 {
     }
 }
 
-/// Throws an error that is not a `DecodingError`.
 private struct Foreign: Decodable {}
 
 extension Foreign {

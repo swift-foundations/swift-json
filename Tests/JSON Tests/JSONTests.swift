@@ -1,6 +1,3 @@
-/// JSONTests.swift
-/// swift-json
-
 import Testing
 
 @testable import JSON
@@ -8,8 +5,6 @@ import Testing
 extension JSON {
     @Suite
     struct Test {
-
-        // MARK: - Literals
 
         @Test
         func `Null literal`() {
@@ -71,8 +66,6 @@ extension JSON {
             #expect(String(json.user.tags[0]) == "swift")
         }
 
-        // MARK: - Dynamic Member Lookup
-
         @Test
         func `Dynamic member lookup`() {
             let json: JSON = ["name": "John", "age": 30]
@@ -85,8 +78,6 @@ extension JSON {
             let json: JSON = ["name": "John"]
             #expect(json.missing.isNull)
         }
-
-        // MARK: - Parsing
 
         @Test
         func `Parse string`() throws {
@@ -102,8 +93,6 @@ extension JSON {
             #expect(Int(json[1]) == 2)
             #expect(Int(json[2]) == 3)
         }
-
-        // MARK: - Serialization
 
         @Test
         func `Serialize to string`() {
@@ -128,8 +117,6 @@ extension JSON {
             #expect(Bool(parsed.verified) == true)
             #expect(String(parsed.tags[0]) == "swift")
         }
-
-        // MARK: - JSON.Serializable
 
         @Test
         func `String serializable`() throws {

@@ -1,14 +1,9 @@
-/// StreamTests.swift
-/// swift-json
-
 import Testing
 
 @testable import JSON
 
 @Suite
 struct Test {
-
-    // MARK: - NDJSON Streaming
 
     @Test
     func `Parse NDJSON stream`() async throws {
@@ -141,8 +136,6 @@ struct Test {
         #expect(ids == [1, 2])
     }
 
-    // MARK: - Single Document Async Parse
-
     @Test
     func `Parse single document from async bytes`() async throws {
         let input = #"{"name": "John", "age": 30}"#
@@ -170,11 +163,9 @@ struct Test {
             _ = try await JSON.parse(collecting: bytes)
             Issue.record("Expected error for empty input")
         } catch {
-            // Expected
+
         }
     }
-
-    // MARK: - JSON.Serializable Async
 
     @Test
     func `Deserialize from async bytes`() async throws {

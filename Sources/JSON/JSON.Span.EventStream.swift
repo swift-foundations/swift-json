@@ -1,31 +1,12 @@
-/// JSON.Span.EventStream.swift
-/// swift-json
-///
-/// JSON-layer event cursor — thin error-conversion wrapper over the
-/// direct ``Lexer/Pull/Stream`` specialised to ``RFC_8259/Pull/Tokens``.
-///
-/// The wrapper exists for one reason only: ``JSON/Serializable``'s
-/// public protocol declares `throws(JSON.Error)`, while the underlying
-/// L1 stream throws ``RFC_8259/Error``. The wrapper converts at the
-/// boundary. The case-(c) pull-down of the structural-event machinery
-/// to L1 (per the 2026-05-14 [RES-018] amendment) is complete on the
-/// L2 side — the deleted `RFC_8259.Span.EventStream` was the
-/// preserve-the-RFC_8259-API wrapper; this is a different category
-/// (typed-throws conversion).
-
 import RFC_8259
 
 extension JSON {
-    /// Namespace for Span-backed JSON variants.
+
     public enum Span {}
 }
 
 extension JSON.Span {
-    /// Pull-driven event cursor over a contiguous-bytes JSON input.
-    ///
-    /// Wraps `Lexer.Pull.Stream<RFC_8259.Pull.Tokens>` directly. Re-throws
-    /// `RFC_8259.Error` as `JSON.Error` so `JSON.Serializable` consumers
-    /// continue to see a single typed-throws error contract.
+
     @safe
     public struct EventStream: ~Copyable, ~Escapable {
         @usableFromInline
@@ -39,27 +20,18 @@ extension JSON.Span {
     }
 }
 
-// MARK: - Token typealias
-
 extension JSON.Span.EventStream {
-    /// Token kinds emitted by `next()`.
+
     public typealias Token = RFC_8259.Token.Kind
 }
 
-// MARK: - Short-circuit detection
-
 extension JSON.Span.EventStream {
-    /// `true` until the first mutating call advances the cursor.
-    ///
-    /// Used by `JSON.Assemble.from(_:)` to short-circuit to the
-    /// wholesale-parse fast path on the default fallback.
+
     @inlinable
     public var isUnforkedAtPositionZero: Bool {
         inner.isPristine
     }
 }
-
-// MARK: - Hot operations
 
 extension JSON.Span.EventStream {
     @inlinable
@@ -101,8 +73,6 @@ extension JSON.Span.EventStream {
         inner.peek().map(\.underlying)
     }
 }
-
-// MARK: - Convenience expect helpers
 
 extension JSON.Span.EventStream {
     @inlinable

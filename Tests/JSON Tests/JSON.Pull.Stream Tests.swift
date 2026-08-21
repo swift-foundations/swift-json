@@ -1,16 +1,3 @@
-/// JSON.Pull.Stream Tests.swift
-/// swift-json
-///
-/// Tests for `Lexer.Pull.Stream<RFC_8259.Pull.Tokens>` — the JSON
-/// specialisation of the L1 pull-driven event cursor. The
-/// JSON-specific payload-decode methods (`currentString`,
-/// `currentNumber`) are defined as extensions at L3 in
-/// `JSON.Pull.Stream+Payload.swift`; this suite exercises them
-/// together with the L1 generic event stream.
-///
-/// Relocated from swift-rfc-8259/Tests under Arc 1.5 — the methods
-/// being tested are implementation, not spec, so the tests live at L3.
-
 import Testing
 
 @testable import JSON
@@ -18,8 +5,6 @@ import Testing
 extension RFC_8259.Pull.Tokens {
     @Suite
     struct Test {
-
-        // MARK: - Token.Kind emission
 
         @Test
         func `next emits objectStart and objectEnd for empty object`() throws {
@@ -104,8 +89,6 @@ extension RFC_8259.Pull.Tokens {
             }
         }
 
-        // MARK: - currentString
-
         @Test
         func `currentString decodes ASCII payload`() throws {
             let bytes: [Byte] = #""hello""#.utf8.map(Byte.init)
@@ -132,7 +115,7 @@ extension RFC_8259.Pull.Tokens {
 
         @Test
         func `currentString decodes unicode escape`() throws {
-            let bytes: [Byte] = #""é""#.utf8.map(Byte.init)  // é
+            let bytes: [Byte] = #""é""#.utf8.map(Byte.init)
             try bytes.withUnsafeBufferPointer {
                 (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
                 let span = buf.span
@@ -144,7 +127,7 @@ extension RFC_8259.Pull.Tokens {
 
         @Test
         func `currentString decodes surrogate pair`() throws {
-            // U+1F600 (😀) encoded as surrogate pair 😀
+
             let bytes: [Byte] = #""😀""#.utf8.map(Byte.init)
             try bytes.withUnsafeBufferPointer {
                 (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
@@ -154,8 +137,6 @@ extension RFC_8259.Pull.Tokens {
                 #expect(try stream.currentString() == "😀")
             }
         }
-
-        // MARK: - currentNumber
 
         @Test
         func `currentNumber decodes integer`() throws {
@@ -205,8 +186,6 @@ extension RFC_8259.Pull.Tokens {
             }
         }
 
-        // MARK: - isPristine
-
         @Test
         func `isPristine true at init`() throws {
             let bytes: [Byte] = #"{"a":1}"#.utf8.map(Byte.init)
@@ -243,8 +222,6 @@ extension RFC_8259.Pull.Tokens {
             }
         }
 
-        // MARK: - skipValue
-
         @Test
         func `skipValue skips a string`() throws {
             let bytes: [Byte] = #""skip me",42"#.utf8.map(Byte.init)
@@ -280,11 +257,11 @@ extension RFC_8259.Pull.Tokens {
                 (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
                 let span = buf.span
                 var stream = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(span)
-                try stream.skip()  // null
+                try stream.skip()
                 #expect(try stream.next() == .comma)
-                try stream.skip()  // true
+                try stream.skip()
                 #expect(try stream.next() == .comma)
-                try stream.skip()  // false
+                try stream.skip()
                 #expect(try stream.next() == .comma)
                 #expect(try stream.next() == .number)
                 #expect(try stream.currentNumber().int64 == 42)
@@ -298,7 +275,7 @@ extension RFC_8259.Pull.Tokens {
                 (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
                 let span = buf.span
                 var stream = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(span)
-                try stream.skip()  // skips the whole {...}
+                try stream.skip()
                 #expect(try stream.next() == .comma)
                 #expect(try stream.next() == .number)
                 #expect(try stream.currentNumber().int64 == 42)
@@ -307,31 +284,30 @@ extension RFC_8259.Pull.Tokens {
 
         @Test
         func `skipValue inside object skips remaining members`() throws {
-            // After consuming objectStart, skipValue should walk to the
-            // matching objectEnd.
+
             let bytes: [Byte] = #"{"a":1,"b":2,"c":3},42"#.utf8.map(Byte.init)
             try bytes.withUnsafeBufferPointer {
                 (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
                 let span = buf.span
                 var stream = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(span)
                 #expect(try stream.next() == .objectStart)
-                // Read first key/value pair.
+
                 #expect(try stream.next() == .string)
                 #expect(try stream.currentString() == "a")
                 #expect(try stream.next() == .colon)
                 #expect(try stream.next() == .number)
                 #expect(try stream.currentNumber().int64 == 1)
-                // Now skip the rest of the object.
+
                 #expect(try stream.next() == .comma)
                 #expect(try stream.next() == .string)
                 #expect(try stream.currentString() == "b")
                 #expect(try stream.next() == .colon)
-                try stream.skip()  // skips "2"
+                try stream.skip()
                 #expect(try stream.next() == .comma)
                 #expect(try stream.next() == .string)
                 #expect(try stream.currentString() == "c")
                 #expect(try stream.next() == .colon)
-                try stream.skip()  // skips "3"
+                try stream.skip()
                 #expect(try stream.next() == .objectEnd)
                 #expect(try stream.next() == .comma)
                 #expect(try stream.next() == .number)
@@ -346,7 +322,7 @@ extension RFC_8259.Pull.Tokens {
                 (buf: UnsafeBufferPointer<Byte>) throws(RFC_8259.Error) in
                 let span = buf.span
                 var stream = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(span)
-                try stream.skip()  // the whole outer array
+                try stream.skip()
                 #expect(try stream.next() == .comma)
                 #expect(try stream.next() == .number)
                 #expect(try stream.currentNumber().int64 == 99)
@@ -367,8 +343,6 @@ extension RFC_8259.Pull.Tokens {
             }
         }
 
-        // MARK: - Depth
-
         @Test
         func `depth exceeded throws`() throws {
             let bytes: [Byte] = "[[[[[]]]]]".utf8.map(Byte.init)
@@ -376,10 +350,10 @@ extension RFC_8259.Pull.Tokens {
                 let span = buf.span
                 var stream = Lexer.Pull.Stream<RFC_8259.Pull.Tokens>(span, limit: 3)
                 do {
-                    _ = try stream.next()  // depth 1
-                    _ = try stream.next()  // depth 2
-                    _ = try stream.next()  // depth 3
-                    _ = try stream.next()  // depth 4 — throw
+                    _ = try stream.next()
+                    _ = try stream.next()
+                    _ = try stream.next()
+                    _ = try stream.next()
                     Issue.record("Expected depthExceeded error")
                 } catch let error as RFC_8259.Error {
                     if case .depthExceeded(_, let limit) = error {
@@ -393,8 +367,6 @@ extension RFC_8259.Pull.Tokens {
             }
         }
 
-        // MARK: - Malformed inputs
-
         @Test
         func `malformed null throws`() throws {
             let bytes: [Byte] = "nulX".utf8.map(Byte.init)
@@ -406,7 +378,7 @@ extension RFC_8259.Pull.Tokens {
                     Issue.record("Expected error")
                 } catch let error as RFC_8259.Error {
                     if case .unexpectedToken = error {
-                        // Pass — we got an unexpectedToken on the byte mismatch.
+
                     } else {
                         Issue.record("Wrong error: \(error)")
                     }
@@ -418,7 +390,7 @@ extension RFC_8259.Pull.Tokens {
 
         @Test
         func `malformed number throws`() throws {
-            // Leading zero is forbidden by RFC 8259.
+
             let bytes: [Byte] = "007".utf8.map(Byte.init)
             bytes.withUnsafeBufferPointer { (buf: UnsafeBufferPointer<Byte>) in
                 let span = buf.span
@@ -429,7 +401,7 @@ extension RFC_8259.Pull.Tokens {
                     Issue.record("Expected leadingZeros error")
                 } catch let error as RFC_8259.Error {
                     if case .invalidNumber(_, let reason) = error, reason == .leadingZeros {
-                        // Pass
+
                     } else {
                         Issue.record("Wrong error: \(error)")
                     }
@@ -451,7 +423,7 @@ extension RFC_8259.Pull.Tokens {
                     Issue.record("Expected unterminated error")
                 } catch let error as RFC_8259.Error {
                     if case .invalidString(_, let reason) = error, reason == .unterminated {
-                        // Pass
+
                     } else {
                         Issue.record("Wrong error: \(error)")
                     }
@@ -486,8 +458,6 @@ extension RFC_8259.Pull.Tokens {
             }
         }
 
-        // MARK: - Whitespace handling
-
         @Test
         func `next skips leading whitespace`() throws {
             let bytes: [Byte] = "   \n\t  null".utf8.map(Byte.init)
@@ -516,8 +486,6 @@ extension RFC_8259.Pull.Tokens {
             }
         }
 
-        // MARK: - Empty input
-
         @Test
         func `next on empty input returns nil`() throws {
             let bytes: [Byte] = []
@@ -540,12 +508,9 @@ extension RFC_8259.Pull.Tokens {
             }
         }
 
-        // MARK: - Token.Kind storage cross-check
-
         @Test
         func `Token Kind unknown payload variant flows through next`() throws {
-            // The .unknown(UInt8) case is reached via the default branch of
-            // next()'s byte switch.
+
             let bytes: [Byte] = [0xFF]
             bytes.withUnsafeBufferPointer { (buf: UnsafeBufferPointer<Byte>) in
                 let span = buf.span

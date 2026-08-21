@@ -28,13 +28,7 @@ let package = Package(
             url: "https://github.com/swift-primitives/swift-array-primitives.git",
             branch: "main"
         ),
-        // The Array<S>-over-column tower: the number-lexer scratch buffer is the inline⊕heap small
-        // column `Array<Buffer<Storage<Memory.Allocator<Memory.Small<24>>>.Contiguous<Byte>>.Linear>`
-        // (the SBO that stays inline up to 24 bytes and spills to heap beyond — the restored
-        // `Array.Small<24>` behaviour, now sound because Storage.Contiguous derives its base per
-        // access, [MEM-SAFE-029]). Array_Primitives does NOT re-export the tower (exports-narrowing),
-        // so each tower layer is an explicit dep + import. (swift-memory-small-primitives transitively
-        // brings the heap + inline arms it composes.)
+
         .package(
             url: "https://github.com/swift-primitives/swift-buffer-primitives.git",
             branch: "main"
